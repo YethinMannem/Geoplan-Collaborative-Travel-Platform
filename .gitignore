@@ -1,0 +1,84 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+*.egg-info/
+dist/
+build/
+
+# Environment variables (sensitive data)
+.env
+backend/.env
+*.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Node / React
+node_modules/
+package-lock.json
+frontend-react/build/
+frontend-react/.pnp
+frontend-react/.pnp.js
+
+# OS
+Thumbs.db
+
+# Project specific
+screenshots/
+*.tmp
+*.bak
+
+# Virtual environment
+backend/venv/
+venv/
+
+# API keys (if stored in files)
+*_key.txt
+*_api_key.txt
+
+# Documentation builds
+docs/_build/
+site/
+
+# MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+.directory

@@ -1,0 +1,346 @@
+.App {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.user-header {
+  position: absolute;
+  top: 10px;
+  right: 50px; /* Leave space for toggle icon button */
+  background: #ffffff;
+  padding: 16px 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  z-index: 2000;
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  font-size: 14px;
+  max-width: calc(100vw - 200px);
+  min-width: 280px;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.user-role-badge {
+  font-weight: 600;
+  color: #6366f1;
+  font-size: 15px;
+  letter-spacing: 0.3px;
+}
+
+.user-permissions {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Override global button color for list buttons in user header */
+.user-header button {
+  color: inherit !important;
+}
+
+.user-header button span {
+  color: inherit !important;
+}
+
+.logout-button {
+  padding: 8px 14px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.2);
+}
+
+.logout-button:hover {
+  background: #dc2626;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3);
+}
+
+.controls {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: white;
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  min-width: 280px;
+  max-height: calc(100vh - 20px);
+  overflow-y: auto;
+}
+
+.controls h3 {
+  margin: 0 0 12px 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.form-group {
+  margin-bottom: 12px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #555;
+  margin-bottom: 4px;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 8px;
+  font-size: 14px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #4CAF50;
+}
+
+.query-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 2px solid #eee;
+}
+
+.query-tabs button {
+  flex: 1;
+  padding: 8px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: 13px;
+  color: #666;
+  transition: all 0.2s;
+}
+
+.query-tabs button.active {
+  color: #4CAF50;
+  border-bottom-color: #4CAF50;
+  font-weight: 500;
+}
+
+.query-tabs button:hover {
+  color: #4CAF50;
+}
+
+button {
+  background: #4CAF50;
+  color: white !important;
+  border: none;
+  padding: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 14px;
+  width: 100%;
+  margin-top: 8px;
+  text-align: center;
+}
+
+button:hover {
+  background: #45a049;
+}
+
+button:disabled {
+  background: #ccc;
+  color: #666 !important;
+  cursor: not-allowed;
+}
+
+button.secondary {
+  background: #2196F3;
+  color: white;
+}
+
+button.secondary:hover {
+  background: #1976D2;
+  color: white;
+}
+
+button.orange {
+  background: #FF9800;
+  color: white;
+}
+
+button.orange:hover {
+  background: #F57C00;
+  color: white;
+}
+
+button.purple {
+  background: #9C27B0;
+  color: white;
+}
+
+button.purple:hover {
+  background: #7B1FA2;
+  color: white;
+}
+
+.sidebar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 350px;
+  max-height: calc(100vh - 20px);
+  background: white;
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+.sidebar h3 {
+  margin: 0 0 12px 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.stats {
+  background: #f5f5f5;
+  padding: 12px;
+  border-radius: 4px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.stats strong {
+  color: #333;
+}
+
+.error {
+  background: #ffebee;
+  color: #c62828;
+  padding: 12px;
+  border-radius: 4px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.results-list {
+  margin-top: 12px;
+}
+
+.result-item {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.result-item:hover {
+  background: #f5f5f5;
+}
+
+.result-item strong {
+  color: #333;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.result-item small {
+  color: #666;
+}
+
+.export-buttons {
+  background: #f5f5f5;
+  padding: 8px;
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+
+.export-buttons .label {
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: #666;
+}
+
+.export-buttons button {
+  margin-bottom: 8px;
+  font-size: 13px;
+  padding: 8px;
+}
+
+.export-buttons button:last-child {
+  margin-bottom: 0;
+}
+
+.loading {
+  text-align: center;
+  padding: 20px;
+  color: #666;
+}
+
+.hidden {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .controls,
+  .sidebar {
+    width: calc(100% - 20px);
+    max-width: 350px;
+  }
+}
+
+
+
