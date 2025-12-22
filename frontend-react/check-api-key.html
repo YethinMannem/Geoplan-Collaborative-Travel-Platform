@@ -67,9 +67,10 @@
     </div>
 
     <script>
-        // Get API key from .env (you'll need to set this manually)
-        const defaultKey = 'AIzaSyCPo3wfO9ahRPGT4JY-M5obr-N2uVcGSH0';
-        document.getElementById('current-key').textContent = defaultKey || 'Not set';
+        // Get API key from environment variable or user input
+        // DO NOT hardcode API keys in source code!
+        const defaultKey = ''; // Set via environment variable or user input
+        document.getElementById('current-key').textContent = defaultKey || 'Not set - Please enter your API key';
         
         function testAPIKey() {
             const apiKey = document.getElementById('api-key-input').value || defaultKey;
