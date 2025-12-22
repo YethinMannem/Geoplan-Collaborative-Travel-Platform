@@ -1,0 +1,150 @@
+.place-list-icons {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.list-icon-btn {
+  width: 32px;
+  height: 32px;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 1rem;
+  padding: 0;
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.list-icon-btn:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  border-color: #cbd5e1;
+}
+
+.list-icon-btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.list-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.list-icon-btn.loading {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* Visited Icon */
+.visited-icon {
+  border-color: #cbd5e1;
+}
+
+.visited-icon.active {
+  background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+  border-color: #3b82f6;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25);
+}
+
+.visited-icon.active:hover:not(:disabled) {
+  background: linear-gradient(135deg, #bfdbfe, #93c5fd);
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.35);
+}
+
+.visited-icon .icon-filled {
+  color: #000000;
+  font-weight: 800;
+  font-size: 0.9375rem;
+}
+
+.visited-icon .icon-outline {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.visited-icon.active .icon-outline {
+  color: #000000;
+}
+
+/* Wishlist Icon */
+.wishlist-icon {
+  border-color: #cbd5e1;
+}
+
+.wishlist-icon.active {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  border-color: #f59e0b;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.25);
+}
+
+.wishlist-icon.active:hover:not(:disabled) {
+  background: linear-gradient(135deg, #fde68a, #fcd34d);
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.35);
+}
+
+.wishlist-icon .icon-filled {
+  color: #000000;
+  font-weight: 800;
+  font-size: 0.9375rem;
+}
+
+.wishlist-icon .icon-outline {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.wishlist-icon.active .icon-outline {
+  color: #000000;
+}
+
+/* Liked Icon */
+.liked-icon {
+  border-color: #cbd5e1;
+}
+
+.liked-icon.active {
+  background: linear-gradient(135deg, #fce7f3, #fbcfe8);
+  border-color: #ec4899;
+  box-shadow: 0 2px 8px rgba(236, 72, 153, 0.25);
+}
+
+.liked-icon.active:hover:not(:disabled) {
+  background: linear-gradient(135deg, #fbcfe8, #f9a8d4);
+  box-shadow: 0 4px 16px rgba(236, 72, 153, 0.35);
+}
+
+.liked-icon .icon-filled {
+  color: #000000;
+  font-weight: 800;
+  font-size: 0.9375rem;
+}
+
+.liked-icon .icon-outline {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.liked-icon.active .icon-outline {
+  color: #000000;
+}
+
+.list-error {
+  color: #dc2626;
+  font-size: 0.875rem;
+  margin-right: auto;
+  padding: 4px 8px;
+  background: #fee2e2;
+  border-radius: 6px;
+  border: 1px solid #fecaca;
+}
+

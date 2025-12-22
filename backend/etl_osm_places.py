@@ -35,11 +35,17 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres@localhost:5432/g
 OVERPASS_API = "https://overpass-api.de/api/interpreter"
 
 # Query areas - focusing on major US cities for diversity
+# Added more Texas cities to ensure better coverage across the state
 QUERY_AREAS = [
     {"name": "New York", "bbox": (40.4774, -74.2591, 40.9176, -73.7004)},
     {"name": "Los Angeles", "bbox": (33.7037, -118.6682, 34.3373, -118.1553)},
     {"name": "Chicago", "bbox": (41.6445, -87.9401, 42.0230, -87.5237)},
     {"name": "Houston", "bbox": (29.5236, -95.8197, 30.1104, -95.0142)},
+    {"name": "Dallas", "bbox": (32.6170, -97.0950, 33.0238, -96.4632)},  # Added
+    {"name": "Austin", "bbox": (30.0987, -97.9384, 30.5169, -97.5614)},  # Added
+    {"name": "San Antonio", "bbox": (29.2241, -98.6937, 29.6387, -98.3013)},  # Added
+    {"name": "Fort Worth", "bbox": (32.5654, -97.5489, 32.9130, -97.0818)},  # Added
+    {"name": "El Paso", "bbox": (31.5411, -106.6292, 32.0850, -106.3030)},  # Added
     {"name": "San Francisco", "bbox": (37.6398, -122.6376, 37.9298, -122.2818)},
     {"name": "Miami", "bbox": (25.7096, -80.3197, 25.8559, -80.1274)},
     {"name": "Seattle", "bbox": (47.4814, -122.4597, 47.7341, -122.2244)},

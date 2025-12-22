@@ -1,98 +1,100 @@
 import React, { useState } from 'react';
 import './Login.css';
 import { setAuthToken } from '../services/api';
+import { registerUser, loginUser } from '../services/userListsApi';
 
-const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:5000';
-
-const DEMO_USERS = [
-  {
-    role: 'readonly_user',
-    username: 'readonly_user',
-    password: 'readonly_pass123',
-    description: 'Read-only access - Can only view data'
-  },
-  {
-    role: 'app_user',
-    username: 'app_user',
-    password: 'app_pass123',
-    description: 'Application user - Can read and write data'
-  },
-  {
-    role: 'analyst_user',
-    username: 'analyst_user',
-    password: 'analyst_pass123',
-    description: 'Analyst - Can read data and use analytics'
-  },
-  {
-    role: 'admin_user',
-    username: 'admin_user',
-    password: 'admin_pass123',
-    description: 'Admin - Full access to all operations'
-  }
-];
+const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:5001';
 
 function Login({ onLoginSuccess }) {
+  const [mode, setMode] = useState('login'); // 'login' or 'register'
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showDemoUsers, setShowDemoUsers] = useState(false);
 
-  const handleSubmit = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
     setLoading(true);
 
+    if (!username || !password) {
+      setError('Username and password are required');
+      setLoading(false);
+      return;
+    }
+
     try {
-      const response = await fetch(`${API_BASE}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include', // Important for sessions
-        body: JSON.stringify({ username, password }),
-      });
-
-      let data;
-      try {
-        data = await response.json();
-      } catch (jsonError) {
-        // If JSON parsing fails, the server might not be running
-        throw new Error(`Server connection failed. Make sure Flask is running on ${API_BASE}`);
-      }
-
-      if (!response.ok) {
-        throw new Error(data.error || `Login failed: HTTP ${response.status}`);
-      }
-
-      // Save token to localStorage
-      if (data.token) {
-        setAuthToken(data.token);
-        console.log('✅ Token saved to localStorage:', data.token.substring(0, 20) + '...');
-      } else {
-        console.warn('⚠️ No token received from login response!', data);
-      }
-
-      // Success!
+      const result = await loginUser({ username, password });
+      
+      setSuccess('Login successful!');
+      
       if (onLoginSuccess) {
-        onLoginSuccess(data);
+        onLoginSuccess(result);
       }
     } catch (err) {
-      const errorMessage = err.message || 'Login failed. Please check your credentials.';
-      setError(errorMessage);
+      setError(err.message || 'Login failed. Please check your credentials.');
       console.error('Login error:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDemoLogin = (demoUser) => {
-    setUsername(demoUser.username);
-    setPassword(demoUser.password);
-    // Auto-submit after a brief delay
-    setTimeout(() => {
-      document.getElementById('login-form').dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
-    }, 100);
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    setLoading(true);
+
+    // Validation
+    if (!username || !email || !password) {
+      setError('All fields are required');
+      setLoading(false);
+      return;
+    }
+
+    if (username.length < 3) {
+      setError('Username must be at least 3 characters');
+      setLoading(false);
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      setLoading(false);
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      await registerUser({ username, email, password });
+      setSuccess('Account created! Logging you in...');
+      
+      // Auto-login after registration
+      setTimeout(async () => {
+        try {
+          const result = await loginUser({ username, password });
+          if (onLoginSuccess) {
+            onLoginSuccess(result);
+          }
+        } catch (err) {
+          setError('Registration successful, but login failed. Please try logging in.');
+          setMode('login');
+        }
+      }, 1000);
+    } catch (err) {
+      setError(err.message || 'Registration failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -101,67 +103,127 @@ function Login({ onLoginSuccess }) {
         <h1>📍 GeoPlan</h1>
         <p className="login-subtitle">Collaborative Travel Planning Platform</p>
         
-        <form id="login-form" onSubmit={handleSubmit} className="login-form">
-          <div className="form-group">
-            <label htmlFor="username">Username</label>
-            <input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter username"
-              required
-              autoFocus
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password"
-              required
-            />
-          </div>
-
-          {error && <div className="error-message">❌ {error}</div>}
-
-          <button type="submit" className="login-button" disabled={loading}>
-            {loading ? 'Logging in...' : 'Login'}
-          </button>
-        </form>
-
-        <div className="demo-users-section">
+        {/* Tabs for Login/Register */}
+        <div className="auth-tabs">
           <button
             type="button"
-            className="demo-toggle"
-            onClick={() => setShowDemoUsers(!showDemoUsers)}
+            className={`tab-button ${mode === 'login' ? 'active' : ''}`}
+            onClick={() => {
+              setMode('login');
+              setError('');
+              setSuccess('');
+            }}
           >
-            {showDemoUsers ? '▼ Hide' : '▶ Show'} Demo Users
+            Login
           </button>
-
-          {showDemoUsers && (
-            <div className="demo-users-list">
-              <p className="demo-note">
-                Click any demo user to auto-fill credentials and login:
-              </p>
-              {DEMO_USERS.map((user) => (
-                <button
-                  key={user.role}
-                  type="button"
-                  className="demo-user-button"
-                  onClick={() => handleDemoLogin(user)}
-                >
-                  <strong>{user.role}</strong>
-                  <span>{user.description}</span>
-                </button>
-              ))}
-            </div>
-          )}
+          <button
+            type="button"
+            className={`tab-button ${mode === 'register' ? 'active' : ''}`}
+            onClick={() => {
+              setMode('register');
+              setError('');
+              setSuccess('');
+            }}
+          >
+            Register
+          </button>
         </div>
+
+        {mode === 'login' ? (
+          <form id="login-form" onSubmit={handleLogin} className="login-form">
+            <div className="form-group">
+              <label htmlFor="username">Username</label>
+              <input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter username"
+                required
+                autoFocus
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="password">Password</label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password"
+                required
+              />
+            </div>
+
+            {error && <div className="error-message">❌ {error}</div>}
+            {success && <div className="success-message">✅ {success}</div>}
+
+            <button type="submit" className="login-button" disabled={loading}>
+              {loading ? 'Logging in...' : 'Login'}
+            </button>
+          </form>
+        ) : (
+          <form id="register-form" onSubmit={handleRegister} className="login-form">
+            <div className="form-group">
+              <label htmlFor="reg-username">Username</label>
+              <input
+                id="reg-username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Choose a username (min 3 chars)"
+                required
+                minLength={3}
+                autoFocus
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="reg-email">Email</label>
+              <input
+                id="reg-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="your.email@example.com"
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="reg-password">Password</label>
+              <input
+                id="reg-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="At least 6 characters"
+                required
+                minLength={6}
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="reg-confirm">Confirm Password</label>
+              <input
+                id="reg-confirm"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter password"
+                required
+              />
+            </div>
+
+            {error && <div className="error-message">❌ {error}</div>}
+            {success && <div className="success-message">✅ {success}</div>}
+
+            <button type="submit" className="login-button" disabled={loading}>
+              {loading ? 'Creating Account...' : 'Create Account'}
+            </button>
+          </form>
+        )}
 
       </div>
     </div>

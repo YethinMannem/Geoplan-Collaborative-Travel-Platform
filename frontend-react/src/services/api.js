@@ -1,4 +1,4 @@
-const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:5000';
+const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:5001';
 
 // Token management using localStorage
 const TOKEN_KEY = 'auth_token';

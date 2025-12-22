@@ -1,191 +1,44 @@
-.group-places-container {
-  padding: 20px;
-  max-width: 1000px;
-  margin: 0 auto;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
+@import '../design-system.css';
 
-.group-places-header {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  margin-bottom: 20px;
-}
-
-.group-places-header h2 {
-  margin: 0;
-  color: #333;
-}
-
-.btn-back {
-  padding: 8px 16px;
-  background: #e0e0e0;
-  color: #333;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.btn-back:hover {
-  background: #d0d0d0;
-}
-
-.places-list {
-  display: grid;
-  gap: 20px;
-  overflow-y: auto;
-  padding-right: 8px;
-}
-
-.places-list::-webkit-scrollbar {
+/* Custom scrollbar for filter sections */
+.group-places-container ::-webkit-scrollbar {
   width: 8px;
 }
 
-.places-list::-webkit-scrollbar-track {
-  background: #f1f1f1;
+.group-places-container ::-webkit-scrollbar-track {
+  background: #f1f5f9;
   border-radius: 4px;
 }
 
-.places-list::-webkit-scrollbar-thumb {
-  background: #888;
+.group-places-container ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
   border-radius: 4px;
 }
 
-.places-list::-webkit-scrollbar-thumb:hover {
-  background: #555;
+.group-places-container ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
-.place-card {
-  background: white;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+/* Animation for loading spinner */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
-.place-header {
-  margin-bottom: 15px;
-  padding-bottom: 15px;
-  border-bottom: 2px solid #f0f0f0;
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-.place-header h3 {
-  margin: 0 0 8px 0;
-  color: #333;
+/* Smooth transitions for collapsible sections */
+.group-places-container * {
+  transition: all 0.2s ease;
 }
-
-.place-location {
-  display: flex;
-  gap: 8px;
-  color: #666;
-  font-size: 14px;
-}
-
-.place-location span:not(:last-child)::after {
-  content: ',';
-  margin-left: 4px;
-}
-
-.members-status {
-  margin-top: 15px;
-}
-
-.members-status h4 {
-  margin: 0 0 12px 0;
-  color: #555;
-  font-size: 16px;
-}
-
-.members-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.member-status-item {
-  padding: 12px;
-  background: #f9f9f9;
-  border-radius: 6px;
-  border-left: 4px solid #2196F3;
-}
-
-.member-status-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.member-status-header strong {
-  color: #333;
-}
-
-.status-badges {
-  display: flex;
-  gap: 6px;
-}
-
-.status-badge {
-  display: inline-block;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: bold;
-  cursor: help;
-}
-
-.status-badge.status-visited {
-  background: #4caf50;
-  color: white;
-}
-
-.status-badge.status-wishlist {
-  background: #ff9800;
-  color: white;
-}
-
-.status-badge.status-liked {
-  background: #e91e63;
-  color: white;
-}
-
-.status-badge.status-none {
-  background: #e0e0e0;
-  color: #666;
-}
-
-.member-status-detail {
-  font-size: 13px;
-  color: #666;
-  margin-top: 4px;
-}
-
-.place-coordinates {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid #eee;
-  font-size: 13px;
-  color: #888;
-}
-
-.error-message {
-  background: #ffebee;
-  color: #c62828;
-  padding: 12px;
-  border-radius: 4px;
-  margin-bottom: 15px;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 60px 20px;
-  color: #666;
-}
-
-.empty-state p {
-  margin: 10px 0;
-}
-

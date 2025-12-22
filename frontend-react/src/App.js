@@ -2,20 +2,30 @@ import React, { useState, useEffect, useRef } from 'react';
 import { GoogleMap, LoadScript, InfoWindow } from '@react-google-maps/api';
 import SearchControls from './components/SearchControls';
 import ResultsSidebar from './components/ResultsSidebar';
+import UserPanel from './components/UserPanel';
+import NavBar from './components/NavBar';
 import Login from './components/Login';
 import UserAuth from './components/UserAuth';
 import Groups from './components/Groups';
 import GroupPlaces from './components/GroupPlaces';
 import { getUserProfile, getVisitedList, getWishlist, getLikedList } from './services/userListsApi';
+import PlaceListIcons from './components/PlaceListIcons';
 import { searchPlaces, getStats, getStateAnalytics, getDensityAnalysis, exportData, checkPermissions, addPlace, uploadCSV, setAuthToken, getAuthToken } from './services/api';
 import './App.css';
 
-const API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || 'YOUR_API_KEY';
-const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:5000';
+const API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '';
+
+// Check if API key is set
+if (!API_KEY || API_KEY.trim() === '') {
+  console.error('⚠️ WARNING: Google Maps API key is not set!');
+  console.error('Please set REACT_APP_GOOGLE_MAPS_API_KEY in your .env file');
+  console.error('See GOOGLE_MAPS_SETUP.md for instructions');
+}
+const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:5001';
 
 const mapContainerStyle = {
   width: '100%',
-  height: '100%'
+  height: 'calc(100vh - 64px)' // Account for navbar height
 };
 
 const defaultCenter = {
@@ -38,19 +48,20 @@ function App() {
   const [userAuthKey, setUserAuthKey] = useState(0);
   const [activeListView, setActiveListView] = useState(null); // 'visited', 'wishlist', 'liked', or null
   const [referenceLocation, setReferenceLocation] = useState(null); // {lat, lon} for distance calculation
-  const [listSearchQuery, setListSearchQuery] = useState(''); // Search filter for personal lists
-  const [allListResults, setAllListResults] = useState([]); // Store all results before filtering
+  const [listSearchQuery, setListSearchQuery] = useState(''); // Search filter for both search results and personal lists
+  const [allListResults, setAllListResults] = useState([]); // Store all results before filtering (for personal lists)
+  const [allSearchResults, setAllSearchResults] = useState([]); // Store all search results before filtering
   
   // Groups state
   const [showGroups, setShowGroups] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
   
   // User header card toggle
-  const [showUserHeader, setShowUserHeader] = useState(true);
+  const [showUserHeader, setShowUserHeader] = useState(false); // Hidden by default - using NavBar instead
 
   // Sidebar toggles
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);  // Search Options
-  const [showRightSidebar, setShowRightSidebar] = useState(true); // Results & Analytics
+  const [showRightSidebar, setShowRightSidebar] = useState(false); // Results & Analytics - only show when there are results
 
   // Group places display on map
   const [groupPlacesMode, setGroupPlacesMode] = useState(false);
@@ -110,10 +121,12 @@ function App() {
     }
   }, []);
 
-  // Check authentication status on mount
+  // Check authentication status on mount (prioritize user account)
   useEffect(() => {
-    checkAuth();
+    // Check user account first (primary auth method)
     checkUserAuth();
+    // Also check role-based auth (for backward compatibility)
+    checkAuth();
   }, []);
 
   // Load stats after authentication
@@ -149,12 +162,15 @@ function App() {
 
   // Helper function to filter list results by search query
   const filterListResults = (places, searchQuery) => {
+    // Ensure places is always an array
+    const safePlaces = Array.isArray(places) ? places : [];
+    
     if (!searchQuery || !searchQuery.trim()) {
-      return places;
+      return safePlaces;
     }
     
     const query = searchQuery.toLowerCase().trim();
-    return places.filter(place => {
+    return safePlaces.filter(place => {
       const name = (place.name || '').toLowerCase();
       const city = (place.city || '').toLowerCase();
       const state = (place.state || '').toLowerCase();
@@ -214,25 +230,43 @@ function App() {
     }
   };
 
-  const handleLoginSuccess = (loginData) => {
+  const handleLoginSuccess = async (loginData) => {
+    // Handle user account login (primary method)
+    if (loginData.user) {
+      setUserAccount(loginData.user);
+      setAuthenticated(true); // Set authenticated for app access
+      // Check user profile to get full details
+      try {
+        const profile = await getUserProfile();
+        setUserAccount(profile.user);
+      } catch (err) {
+        console.warn('Could not fetch user profile:', err);
+      }
+    } else {
+      // Fallback: role-based login (for admin/backward compatibility)
     setAuthenticated(true);
     setUserRole(loginData.role);
     setUserPermissions(loginData.permissions || []);
+    }
   };
 
   // Check user account authentication (for personal lists)
   const checkUserAuth = async () => {
     const token = getAuthToken();
     if (!token) {
+      setUserAccount(null);
+      setAuthenticated(false);
       return;
     }
 
     try {
       const profile = await getUserProfile();
       setUserAccount(profile.user);
+      setAuthenticated(true); // Set authenticated when user account is found
     } catch (err) {
       // Token might be expired, invalid, or for role-based auth only
       setUserAccount(null);
+      setAuthenticated(false);
     }
   };
 
@@ -249,9 +283,10 @@ function App() {
   const handleUserLogout = () => {
     setAuthToken(null);
     setUserAccount(null);
+    setAuthenticated(false); // Clear authenticated state to redirect to login
     setActiveListView(null);
     // Refresh results to remove list status
-    if (results.length > 0) {
+    if (Array.isArray(results) && results.length > 0) {
       setResults(results.map(r => {
         const { list_status, ...rest } = r;
         return rest;
@@ -302,120 +337,53 @@ function App() {
         city: p.city,
         state: p.state,
         country: p.country,
-        lat: p.lat,
-        lon: p.lon,
-        distance_km: p.distance_km, // Include distance if calculated
+        lat: p.latitude || p.lat,
+        lon: p.longitude || p.lon,
+        place_type: p.place_type,
+        distance_km: p.distance_km || null,
         list_status: {
-          visited: listType === 'visited',
-          wishlist: listType === 'wishlist',
-          liked: listType === 'liked'
+          visited: p.visited || false,
+          wishlist: p.in_wishlist || false,
+          liked: p.liked || false
         }
       }));
       
-      // Store reference location if used
-      if (refLat !== null && refLon !== null) {
-        setReferenceLocation({ lat: refLat, lon: refLon });
+      // Show sidebar when loading personal list with results
+      if (formattedPlaces.length > 0) {
+        setShowRightSidebar(true);
+      } else {
+        setShowRightSidebar(false);
       }
-
-      // Store all results and apply current search filter
+      
       setAllListResults(formattedPlaces);
-      const filteredPlaces = filterListResults(formattedPlaces, listSearchQuery);
-      setResults(filteredPlaces);
-      
-      let queryText = `${listType.charAt(0).toUpperCase() + listType.slice(1)} List (${formattedPlaces.length} places)`;
-      if (refLat !== null && refLon !== null) {
-        queryText += ` • Distance from (${refLat.toFixed(4)}, ${refLon.toFixed(4)})`;
-      }
-      if (listSearchQuery) {
-        queryText += ` • Filtered: ${filteredPlaces.length} shown`;
-      }
-      setQueryInfo(queryText);
-      
-      // Create marker data (markers will be updated automatically by useEffect)
-      const newMarkers = formattedPlaces.map((place, index) => ({
-        id: place.id || `place-${index}-${Date.now()}-${Math.random()}`,
-        position: { 
-          lat: parseFloat(place.lat), 
-          lng: parseFloat(place.lon) 
-        },
-        place: {
-          ...place,
-          lat: parseFloat(place.lat),
-          lon: parseFloat(place.lon),
-        },
-      }));
-      
-      setMarkers(newMarkers);
+      const filtered = filterListResults(formattedPlaces, listSearchQuery);
+      setResults(filtered);
+      setReferenceLocation(refLat && refLon ? { lat: refLat, lon: refLon } : null);
     } catch (err) {
       console.error(`Error loading ${listType} list:`, err);
       setError(`Failed to load ${listType} list: ${err.message}`);
       setResults([]);
-      setAllListResults([]);
     } finally {
       setLoading(false);
     }
   };
   
-  // Apply search filter when search query changes for personal lists
-  useEffect(() => {
-    if (activeListView && allListResults.length > 0) {
-      const filtered = filterListResults(allListResults, listSearchQuery);
-      setResults(filtered);
-      
-      // Update markers to match filtered results
-      const filteredMarkers = filtered.map((place, index) => ({
-        id: place.id || `place-${index}-${Date.now()}-${Math.random()}`,
-        position: { 
-          lat: parseFloat(place.lat), 
-          lng: parseFloat(place.lon) 
-        },
-        place: {
-          ...place,
-          lat: parseFloat(place.lat),
-          lon: parseFloat(place.lon),
-        },
-      }));
-      setMarkers(filteredMarkers);
-      
-      // Update query info with filter status
-      const listType = activeListView;
-      let queryText = `${listType.charAt(0).toUpperCase() + listType.slice(1)} List (${allListResults.length} places)`;
-      if (referenceLocation) {
-        queryText += ` • Distance from (${referenceLocation.lat.toFixed(4)}, ${referenceLocation.lon.toFixed(4)})`;
-      }
-      if (listSearchQuery) {
-        queryText += ` • Filtered: ${filtered.length} shown`;
-      }
-      setQueryInfo(queryText);
-    }
-  }, [listSearchQuery, activeListView, allListResults, referenceLocation]);
-
-  // Get user's current location
-  const getCurrentLocation = () => {
-    return new Promise((resolve, reject) => {
+  // Load list with current location for distance calculation
+  const loadListWithCurrentLocation = async (listType) => {
       if (!navigator.geolocation) {
-        reject(new Error('Geolocation is not supported by your browser'));
+      alert('Geolocation is not available');
+      await loadPersonalList(listType);
         return;
       }
       
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          resolve({
+    try {
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
+      });
+      const location = {
             lat: position.coords.latitude,
             lon: position.coords.longitude
-          });
-        },
-        (error) => {
-          reject(new Error(`Error getting location: ${error.message}`));
-        }
-      );
-    });
-  };
-
-  // Load list with current location
-  const loadListWithCurrentLocation = async (listType) => {
-    try {
-      const location = await getCurrentLocation();
+      };
       await loadPersonalList(listType, location.lat, location.lon);
     } catch (error) {
       alert(`Could not get your location: ${error.message}`);
@@ -424,68 +392,38 @@ function App() {
     }
   };
 
+  // Filter results when search query changes (for both search results and personal lists)
+  useEffect(() => {
+    if (activeListView && allListResults.length > 0) {
+      // Filter personal list results
+      const filtered = filterListResults(allListResults, listSearchQuery);
+      setResults(filtered);
+    } else if (!activeListView && allSearchResults.length > 0) {
+      // Filter search results
+      const filtered = filterListResults(allSearchResults, listSearchQuery);
+      setResults(filtered);
+    }
+  }, [listSearchQuery, activeListView, allListResults, allSearchResults]);
 
-  // Reset to normal search mode
+  // Reset to search mode (clear personal list view)
   const resetToSearchMode = () => {
     setActiveListView(null);
-    setReferenceLocation(null);
-    setActiveListView(null);
+    setListSearchQuery('');
+    setAllListResults([]);
+    setAllSearchResults([]);
     setResults([]);
-    clearAllMarkers();
-    setQueryInfo('');
-    if (map) {
-      map.setCenter(defaultCenter);
-      map.setZoom(defaultZoom);
-    }
+    setReferenceLocation(null);
   };
 
-  const handleLogout = async () => {
-    try {
-      const token = getAuthToken();
-      const headers = {
-        'Content-Type': 'application/json',
-      };
-      
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-        headers['X-Auth-Token'] = token;
-      }
-
-      await fetch(`${API_BASE}/auth/logout`, {
-        method: 'POST',
-        credentials: 'include',
-        headers,
-      });
-      
-      // Clear token from localStorage
+  const handleLogout = () => {
       setAuthToken(null);
       setAuthenticated(false);
       setUserRole(null);
       setUserPermissions([]);
+    setUserAccount(null);
+    setActiveListView(null);
       setResults([]);
-      setMarkers([]);
-      setStats(null);
-      setAnalytics(null);
-      setDensity(null);
-      clearAllMarkers();
-    } catch (err) {
-      console.error('Logout failed:', err);
-    }
-  };
-
-  const loadStats = async () => {
-    try {
-      setLoading(true);
       setError(null);
-      const data = await getStats();
-      setStats(data);
-      console.log('Stats loaded:', data); // Debug log
-    } catch (err) {
-      console.error('Failed to load stats:', err);
-      setError('Failed to load statistics. Please try again.');
-    } finally {
-      setLoading(false);
-    }
   };
 
   const loadPermissionDetails = async () => {
@@ -494,8 +432,7 @@ function App() {
       setPermissionDetails(data);
       setShowPermissions(true);
     } catch (err) {
-      setError('Failed to check permissions');
-      console.error(err);
+      alert('Failed to check permissions: ' + err.message);
     }
   };
 
@@ -514,10 +451,24 @@ function App() {
     }
   };
 
-  const handleAddLocationSubmit = async (e) => {
+  const handleCancelAdd = () => {
+    setAddingLocation(false);
+    setShowAddForm(false);
+    setNewLocationCoords(null);
+    setNewLocationData({ 
+      name: '', 
+      city: '', 
+      state: '', 
+      country: 'US',
+      place_type: 'brewery',
+      type_data: {}
+    });
+  };
+
+  const handleAddLocation = async (e) => {
     e.preventDefault();
-    if (!newLocationCoords || !newLocationData.name) {
-      setError('Please fill in all required fields');
+    if (!newLocationCoords) {
+      alert('Please click on the map to select a location');
       return;
     }
 
@@ -526,55 +477,22 @@ function App() {
 
     try {
       const placeData = {
-        name: newLocationData.name,
-        city: newLocationData.city || '',
-        state: newLocationData.state || '',
-        country: newLocationData.country || 'US',
-        lat: newLocationCoords.lat,
-        lon: newLocationCoords.lon,
-        place_type: newLocationData.place_type || 'brewery',
-        type_data: newLocationData.type_data || {}
+        ...newLocationData,
+        latitude: newLocationCoords.lat,
+        longitude: newLocationCoords.lon,
       };
 
-      const result = await addPlace(placeData);
-      
-      if (result.success && result.place) {
-        // Add the new location to the map
-        const newMarker = {
-          id: result.place.id,
-          position: { lat: result.place.lat, lng: result.place.lon },
-          place: result.place
-        };
-        setMarkers([...markers, newMarker]);
-        setResults([...results, result.place]);
-        
-        // Close form and reset
-        setShowAddForm(false);
-        setNewLocationCoords(null);
-        setNewLocationData({ name: '', city: '', state: '', country: 'US', place_type: 'brewery', type_data: {} });
-        setError(null);
-        
-        // Reload stats
-        loadStats();
-      }
+      await addPlace(placeData);
+      alert('✅ Location added successfully!');
+      handleCancelAdd();
+      // Optionally refresh stats
+      await loadStats();
     } catch (err) {
-      let errorMessage = err.message || 'Failed to add location.';
-      if (errorMessage.includes('401') || errorMessage.includes('Not authenticated')) {
-        errorMessage = 'Session expired. Please logout and login again, then try adding the location.';
-      } else if (errorMessage.includes('403') || errorMessage.includes('Permission denied')) {
-        errorMessage = 'You do not have permission to add locations. Only admin_user and app_user can add locations.';
-      }
-      setError(errorMessage);
+      console.error('Error adding location:', err);
+      setError('Failed to add location: ' + (err.message || 'Unknown error'));
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleCancelAdd = () => {
-    setAddingLocation(false);
-    setShowAddForm(false);
-    setNewLocationCoords(null);
-    setNewLocationData({ name: '', city: '', state: '', country: 'US', place_type: 'brewery', type_data: {} });
   };
 
   const handleCSVUpload = async (event) => {
@@ -582,177 +500,111 @@ function App() {
     if (!file) return;
 
     setUploadingCSV(true);
-    setError(null);
     setCsvUploadResult(null);
+    setError(null);
 
     try {
       const result = await uploadCSV(file);
       setCsvUploadResult(result);
-      
-      // Reload stats and refresh map
+      alert(`✅ CSV uploaded successfully! ${result.added || 0} places added, ${result.updated || 0} updated, ${result.errors || 0} errors.`);
+      // Refresh stats
       await loadStats();
-      
-      // Clear file input
+    } catch (err) {
+      console.error('Error uploading CSV:', err);
+      setError('Failed to upload CSV: ' + (err.message || 'Unknown error'));
+      alert('❌ CSV upload failed: ' + (err.message || 'Unknown error'));
+    } finally {
+      setUploadingCSV(false);
+      // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
-      
-      // Show success message
-      if (result.summary && result.summary.inserted > 0) {
-        alert(`✅ Successfully uploaded ${result.summary.inserted} locations from CSV!`);
-      }
-    } catch (err) {
-      let errorMessage = err.message || 'Failed to upload CSV file.';
-      if (errorMessage.includes('401') || errorMessage.includes('Not authenticated')) {
-        errorMessage = 'Session expired. Please logout and login again.';
-      } else if (errorMessage.includes('403') || errorMessage.includes('Permission denied')) {
-        errorMessage = 'Only admin_user can upload CSV files.';
-      }
-      setError(errorMessage);
-    } finally {
-      setUploadingCSV(false);
     }
   };
-
-  // Update marker clustering when markers change
-  useEffect(() => {
-    if (!map || !window.google || !window.google.maps) {
-      return;
-    }
-
-    // Always clear existing markers first - do this synchronously
-    clearAllMarkers();
-
-    // Only create markers if we have data
-    if (markers.length === 0) {
-      return;
-    }
-
-    // Use a small delay to ensure cleanup is complete
-    const timeoutId = setTimeout(() => {
-      // Create new markers
-      const newGoogleMarkers = markers.map(m => {
-        const marker = new window.google.maps.Marker({
-          position: { lat: m.position.lat, lng: m.position.lng },
-          title: m.place.name || 'Unknown',
-          map: null, // Don't add to map directly yet
-        });
-
-        marker.addListener('click', () => {
-          setSelectedPlace(m.place);
-          if (map) {
-            map.setCenter({ lat: m.position.lat, lng: m.position.lng });
-            map.setZoom(15);
-          }
-        });
-
-        return marker;
-      });
-
-      googleMarkersRef.current = newGoogleMarkers;
-
-      // Use clustering only if 5+ markers and library is available
-      if (markers.length >= 5 && markerClustererLibRef.current) {
-        try {
-          clustererRef.current = new markerClustererLibRef.current.MarkerClusterer({
-            map: map,
-            markers: newGoogleMarkers,
-          });
-        } catch (e) {
-          console.warn('Error creating clusterer, showing markers directly:', e);
-          // Fallback to showing markers directly
-          newGoogleMarkers.forEach(marker => {
-            marker.setMap(map);
-          });
-        }
-      } else {
-        // Show markers directly on map
-        newGoogleMarkers.forEach(marker => {
-          marker.setMap(map);
-        });
-      }
-
-      // Fit bounds to show all markers
-      if (newGoogleMarkers.length > 0) {
-        setTimeout(() => {
-          if (map && newGoogleMarkers.length > 0) {
-            const bounds = new window.google.maps.LatLngBounds();
-            newGoogleMarkers.forEach(marker => {
-              if (marker && marker.getPosition) {
-                bounds.extend(marker.getPosition());
-              }
-            });
-            
-            if (!bounds.isEmpty()) {
-              map.fitBounds(bounds);
-
-              // Don't zoom in too much for single marker
-              if (newGoogleMarkers.length === 1) {
-                setTimeout(() => {
-                  if (map.getZoom() > 15) {
-                    map.setZoom(12);
-                  }
-                }, 100);
-              }
-            }
-          }
-        }, 100);
-      }
-    }, 100);
-
-    // Cleanup function
-    return () => {
-      clearTimeout(timeoutId);
-      clearAllMarkers();
-    };
-  }, [markers, map, clearAllMarkers]);
 
   const handleSearch = async (searchParams) => {
     setLoading(true);
     setError(null);
-    setActiveListView(null); // Reset list view when doing a new search
-    setReferenceLocation(null); // Clear reference location
-    setSelectedPlace(null);
-
-    // Force clear markers immediately
-    clearAllMarkers();
-    setMarkers([]);
-    setResults([]);
+    setActiveListView(null); // Clear personal list view
+    setListSearchQuery(''); // Clear list search
+    setAllListResults([]); // Clear stored list results
 
     try {
+      console.log('🔍 Search params:', searchParams);
       const data = await searchPlaces(searchParams);
-      const features = data.features || [];
+      console.log('📊 Search response:', data);
       
-      setResults(features);
-      setQueryInfo(data.query_info || '');
-
-      // Create marker data with unique IDs
-      const newMarkers = features.map((place, index) => ({
-        id: place.id || `place-${index}-${Date.now()}-${Math.random()}`,
-        position: { 
-          lat: parseFloat(place.lat), 
-          lng: parseFloat(place.lon) 
-        },
-        place: {
-          ...place,
-          lat: parseFloat(place.lat),
-          lon: parseFloat(place.lon),
-        },
-      }));
-
-      // Set new markers - this will trigger useEffect
-      setMarkers(newMarkers);
-
-      // Auto-load density analysis for radius and nearest queries
-      if (searchParams.type === 'radius' || searchParams.type === 'nearest') {
-        setTimeout(() => loadDensityAnalysis(searchParams), 500);
+      // Backend returns {features: [...], count: N} for radius/nearest searches
+      // Handle both formats: {features: [...]} or {places: [...]} or direct array
+      let resultsArray = [];
+      if (data?.features && Array.isArray(data.features)) {
+        resultsArray = data.features;
+      } else if (data?.places && Array.isArray(data.places)) {
+        resultsArray = data.places;
+      } else if (Array.isArray(data)) {
+        resultsArray = data;
       }
+      
+      console.log(`✅ Found ${resultsArray.length} places`);
+      // Debug: Log first result to check data structure
+      if (resultsArray.length > 0) {
+        console.log('📋 Sample place data:', {
+          name: resultsArray[0].name,
+          rating: resultsArray[0].rating,
+          description: resultsArray[0].description,
+          place_type: resultsArray[0].place_type
+        });
+      }
+      // Store all search results for filtering
+      setAllSearchResults(resultsArray);
+      setResults(resultsArray);
+      
+      // Automatically show sidebar when results are found
+      if (resultsArray.length > 0) {
+        setShowRightSidebar(true);
+      } else {
+        setShowRightSidebar(false);
+        setError(`No places found. Try increasing the search radius or selecting a different state.`);
+      }
+      
+      // Build query info string
+      let info = '';
+      if (searchParams.type === 'radius') {
+        info = `Radius search: ${searchParams.km}km from (${searchParams.lat.toFixed(4)}, ${searchParams.lon.toFixed(4)})`;
+      } else if (searchParams.type === 'nearest') {
+        info = `Nearest ${searchParams.k} places from (${searchParams.lat.toFixed(4)}, ${searchParams.lon.toFixed(4)})`;
+      } else if (searchParams.type === 'bbox') {
+        info = `Bounding box: [${searchParams.south.toFixed(2)}, ${searchParams.west.toFixed(2)}] to [${searchParams.north.toFixed(2)}, ${searchParams.east.toFixed(2)}]`;
+      }
+      if (searchParams.name) info += `, name: "${searchParams.name}"`;
+      if (searchParams.state) info += `, state: "${searchParams.state}"`;
+      if (searchParams.place_type) info += `, type: ${searchParams.place_type}`;
+      setQueryInfo(info);
     } catch (err) {
-      setError(err.message || 'Failed to search. Make sure the Flask API is running.');
+      console.error('❌ Search error:', err);
+      setError('Search failed: ' + (err.message || 'Unknown error'));
       setResults([]);
-      setMarkers([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleMarkerClick = (place) => {
+    // Find the full place data from results to get list_status
+    const fullPlace = results.find(p => p.id === place.id) || place;
+    setSelectedPlace({
+      ...fullPlace,
+      lat: fullPlace.lat || fullPlace.latitude,
+      lon: fullPlace.lon || fullPlace.longitude
+    });
+  };
+
+  const loadStats = async () => {
+    try {
+      const data = await getStats();
+      setStats(data);
+    } catch (err) {
+      console.error('Error loading stats:', err);
     }
   };
 
@@ -761,37 +613,26 @@ function App() {
       const data = await getStateAnalytics();
       setAnalytics(data);
     } catch (err) {
-      setError('Failed to load analytics');
-      console.error(err);
+      console.error('Error loading analytics:', err);
+      setError('Failed to load analytics: ' + err.message);
     }
   };
 
-  const loadDensityAnalysis = async (searchParams) => {
+  const loadDensityAnalysis = async (params) => {
     try {
-      const lat = searchParams?.lat || defaultCenter.lat;
-      const lon = searchParams?.lon || defaultCenter.lng;
-      const radius = searchParams?.km || 100;
-
-      const data = await getDensityAnalysis(lat, lon, radius);
+      const data = await getDensityAnalysis(params);
       setDensity(data);
     } catch (err) {
-      console.error('Failed to load density analysis:', err);
+      console.error('Error loading density:', err);
+      setError('Failed to load density analysis: ' + err.message);
     }
   };
 
   const handleExport = async (format) => {
     try {
-      await exportData(format);
+      await exportData(format, results);
     } catch (err) {
-      setError(`Export failed: ${err.message}`);
-    }
-  };
-
-  const handleMarkerClick = (place) => {
-    setSelectedPlace(place);
-    if (map) {
-      map.setCenter({ lat: place.lat, lng: place.lon });
-      map.setZoom(15);
+      alert('Export failed: ' + err.message);
     }
   };
 
@@ -804,504 +645,241 @@ function App() {
     setMap(null);
   };
 
-  // Conditional returns AFTER all hooks
-  // Show loading while checking auth
-  if (checkingAuth) {
+  // Update markers when results change
+  useEffect(() => {
+    try {
+      if (!map || !window.google || !window.google.maps) {
+        return;
+      }
+
+      clearAllMarkers();
+
+      // Ensure results is an array
+      const safeResults = Array.isArray(results) ? results : [];
+      
+      if (safeResults.length === 0) {
+        return;
+      }
+
+      const google = window.google;
+      const newMarkers = [];
+
+      // For 5+ markers, use clustering
+      if (safeResults.length >= 5 && markerClustererLibRef.current) {
+        const markers = safeResults.map(place => {
+          try {
+            const position = {
+              lat: parseFloat(place.lat || place.latitude),
+              lng: parseFloat(place.lon || place.longitude)
+            };
+
+            if (isNaN(position.lat) || isNaN(position.lng)) {
+              console.warn('Invalid coordinates for place:', place);
+              return null;
+            }
+
+            const marker = new google.maps.Marker({
+              position,
+              map,
+              title: place.name || 'Unknown',
+              animation: google.maps.Animation.DROP
+            });
+
+            marker.addListener('click', () => {
+              handleMarkerClick(place);
+            });
+
+            return marker;
+          } catch (e) {
+            console.error('Error creating marker:', e, place);
+            return null;
+          }
+        }).filter(m => m !== null);
+
+        try {
+          clustererRef.current = new markerClustererLibRef.current.MarkerClusterer({
+            map,
+            markers
+          });
+          googleMarkersRef.current = markers;
+        } catch (e) {
+          console.error('Error creating clusterer:', e);
+          // Fallback to individual markers
+          markers.forEach(m => newMarkers.push(m));
+          googleMarkersRef.current = markers;
+        }
+      } else {
+        // For < 5 markers, add individually
+        safeResults.forEach(place => {
+          try {
+            const position = {
+              lat: parseFloat(place.lat || place.latitude),
+              lng: parseFloat(place.lon || place.longitude)
+            };
+
+            if (isNaN(position.lat) || isNaN(position.lng)) {
+              console.warn('Invalid coordinates for place:', place);
+              return;
+            }
+
+            const marker = new google.maps.Marker({
+              position,
+              map,
+              title: place.name || 'Unknown',
+              animation: google.maps.Animation.DROP
+            });
+
+            marker.addListener('click', () => {
+              handleMarkerClick(place);
+            });
+
+            newMarkers.push(marker);
+            googleMarkersRef.current.push(marker);
+          } catch (e) {
+            console.error('Error creating marker:', e, place);
+          }
+        });
+      }
+
+      setMarkers(newMarkers);
+    } catch (error) {
+      console.error('Error in markers useEffect:', error);
+      // Don't throw - just log the error
+    }
+  }, [results, map, clearAllMarkers]);
+
+  // Show API key warning if not set
+  if (!API_KEY || API_KEY === 'YOUR_API_KEY' || API_KEY.trim() === '') {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <div>Checking authentication...</div>
+        <div style={{ 
+          display: 'flex', 
+          flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        padding: '40px',
+        background: 'linear-gradient(135deg, #fef3c7, #fde68a)',
+        textAlign: 'center'
+      }}>
+              <div style={{ 
+          background: 'white',
+          padding: '40px',
+          borderRadius: '20px',
+          boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+          maxWidth: '600px'
+        }}>
+          <div style={{ fontSize: '4rem', marginBottom: '20px' }}>⚠️</div>
+          <h1 style={{ 
+            fontSize: '1.75rem', 
+            fontWeight: '800', 
+            color: '#000000',
+            marginBottom: '16px'
+          }}>
+            Google Maps API Key Required
+          </h1>
+          <p style={{ 
+            fontSize: '1rem', 
+            color: '#000000',
+            marginBottom: '24px',
+            lineHeight: '1.6'
+          }}>
+            To use this application, you need to set up a Google Maps API key.
+          </p>
+                  <div style={{ 
+            background: '#f3f4f6',
+            padding: '20px',
+            borderRadius: '12px',
+            marginBottom: '24px',
+            textAlign: 'left'
+          }}>
+            <h3 style={{ 
+              fontSize: '1.125rem', 
+              fontWeight: '800', 
+              color: '#000000',
+              marginBottom: '12px'
+            }}>
+              Quick Setup:
+            </h3>
+            <ol style={{ 
+              fontSize: '0.9375rem', 
+              color: '#000000',
+              lineHeight: '1.8',
+              paddingLeft: '20px',
+              margin: 0
+            }}>
+              <li style={{ marginBottom: '8px' }}>Get API key from <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', fontWeight: '700', textDecoration: 'underline' }}>Google Cloud Console</a></li>
+              <li style={{ marginBottom: '8px' }}>Enable <strong>Maps JavaScript API</strong> and <strong>Places API</strong></li>
+              <li style={{ marginBottom: '8px' }}>Create <code style={{ background: '#e5e7eb', padding: '2px 6px', borderRadius: '4px', fontSize: '0.875rem' }}>.env</code> file in <code style={{ background: '#e5e7eb', padding: '2px 6px', borderRadius: '4px', fontSize: '0.875rem' }}>frontend-react/</code></li>
+              <li style={{ marginBottom: '8px' }}>Add: <code style={{ background: '#e5e7eb', padding: '2px 6px', borderRadius: '4px', fontSize: '0.875rem' }}>REACT_APP_GOOGLE_MAPS_API_KEY=your_key_here</code></li>
+              <li>Restart the development server</li>
+            </ol>
+          </div>
+          <p style={{ 
+            fontSize: '0.875rem', 
+            color: '#6b7280',
+            fontWeight: '600'
+          }}>
+            See <strong>GOOGLE_MAPS_SETUP.md</strong> for detailed instructions
+          </p>
+        </div>
       </div>
     );
   }
 
-  // Show login page if not authenticated
-  if (!authenticated) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
+  if (checkingAuth) {
+    return (
+      <div style={{
+                        display: 'flex',
+        justifyContent: 'center',
+                        alignItems: 'center',
+        height: '100vh',
+        fontSize: '1.2rem',
+        color: 'var(--text-secondary)'
+      }}>
+        Checking authentication...
+      </div>
+    );
+  }
+
+  // Show login/signup page first if user is not authenticated
+  // Only show main app after successful login
+  if (!userAccount && !authenticated) {
+    return (
+      <div style={{ width: '100%', height: '100vh', overflow: 'hidden' }}>
+        <Login onLoginSuccess={handleLoginSuccess} />
+                  </div>
+    );
   }
 
   return (
     <div className="App">
-      {/* Toggle button for user header - Icon only */}
-      <button
-        onClick={() => setShowUserHeader(!showUserHeader)}
-        style={{
-          position: 'absolute',
-          top: '12px',
-          right: '12px',
-          zIndex: 2001,
-          width: '32px',
-          height: '32px',
-          background: showUserHeader ? '#f5f5f5' : '#2196F3',
-          color: showUserHeader ? '#666' : 'white',
-          border: '1px solid #ddd',
-          borderRadius: '50%',
-          cursor: 'pointer',
-          fontSize: '16px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '0',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-          transition: 'all 0.2s',
-          fontWeight: '300'
-        }}
-        onMouseEnter={(e) => {
-          e.target.style.background = showUserHeader ? '#f44336' : '#1976D2';
-          e.target.style.color = 'white';
-          e.target.style.borderColor = showUserHeader ? '#f44336' : '#1976D2';
-          e.target.style.transform = 'scale(1.1)';
-        }}
-        onMouseLeave={(e) => {
-          e.target.style.background = showUserHeader ? '#f5f5f5' : '#2196F3';
-          e.target.style.color = showUserHeader ? '#666' : 'white';
-          e.target.style.borderColor = '#ddd';
-          e.target.style.transform = 'scale(1)';
-        }}
-        title={showUserHeader ? 'Hide user info' : 'Show user info'}
-      >
-        {showUserHeader ? '×' : '👤'}
-      </button>
-
-      {/* User Info Header */}
-      {showUserHeader && (
-        <div className="user-header">
-        <div className="user-info">
-          <span className="user-role-badge">👤 {userRole}</span>
-          <span className="user-permissions">
-            Permissions: {userPermissions.join(', ')}
-          </span>
-          <div style={{ display: 'flex', gap: '6px', marginTop: '4px', flexWrap: 'wrap' }}>
-            <button 
-              onClick={loadPermissionDetails}
-              style={{ 
-                padding: '6px 12px', 
-                fontSize: '12px', 
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontWeight: '500',
-                boxShadow: '0 2px 4px rgba(102, 126, 234, 0.2)',
-                transition: 'all 0.2s ease'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.transform = 'translateY(-1px)';
-                e.target.style.boxShadow = '0 4px 8px rgba(102, 126, 234, 0.3)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = '0 2px 4px rgba(102, 126, 234, 0.2)';
-              }}
-            >
-              🔒 Test Permissions
-            </button>
-            {(userRole === 'admin_user' || userRole === 'app_user') && (
-              <button
-                onClick={handleEnableAddMode}
-                disabled={addingLocation || loading}
-                style={{
-                  padding: '6px 12px',
-                  fontSize: '12px',
-                  background: addingLocation ? '#ff9800' : '#10b981',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: addingLocation ? 'crosshair' : 'pointer',
-                  whiteSpace: 'nowrap',
-                  fontWeight: '500',
-                  boxShadow: addingLocation ? '0 2px 4px rgba(255, 152, 0, 0.2)' : '0 2px 4px rgba(16, 185, 129, 0.2)',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  if (!addingLocation && !loading) {
-                    e.target.style.transform = 'translateY(-1px)';
-                    e.target.style.boxShadow = '0 4px 8px rgba(16, 185, 129, 0.3)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.transform = 'translateY(0)';
-                  e.target.style.boxShadow = addingLocation ? '0 2px 4px rgba(255, 152, 0, 0.2)' : '0 2px 4px rgba(16, 185, 129, 0.2)';
-                }}
-              >
-                {addingLocation ? '📍 Click Map' : '➕ Add Location'}
-              </button>
-            )}
-            {userRole === 'admin_user' && (
-              <label
-                style={{
-                  padding: '6px 12px',
-                  fontSize: '12px',
-                  background: uploadingCSV ? '#94a3b8' : '#3b82f6',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: uploadingCSV ? 'not-allowed' : 'pointer',
-                  whiteSpace: 'nowrap',
-                  display: 'inline-block',
-                  fontWeight: '500',
-                  boxShadow: uploadingCSV ? 'none' : '0 2px 4px rgba(59, 130, 246, 0.2)',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  if (!uploadingCSV) {
-                    e.target.style.transform = 'translateY(-1px)';
-                    e.target.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.3)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.transform = 'translateY(0)';
-                  e.target.style.boxShadow = uploadingCSV ? 'none' : '0 2px 4px rgba(59, 130, 246, 0.2)';
-                }}
-              >
-                {uploadingCSV ? '📤 Uploading...' : '📁 Upload CSV'}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".csv"
-                  onChange={handleCSVUpload}
-                  disabled={uploadingCSV}
-                  style={{ display: 'none' }}
-                />
-              </label>
-            )}
-          </div>
-        </div>
-        <div style={{ 
-          display: 'flex', 
-          flexDirection: 'column',
-          gap: '12px', 
-          alignItems: 'flex-start',
-          minWidth: '160px'
-        }}>
-          {userAccount ? (
-            <>
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '8px',
-                padding: '8px 12px',
-                background: '#f8fafc',
-                borderRadius: '8px',
-                width: '100%',
-                border: '1px solid #e2e8f0'
-              }}>
-                <span style={{ fontSize: '13px', color: '#475569', fontWeight: '500' }}>
-                  👤 {userAccount.username}
-                </span>
-              </div>
-              {(activeListView || groupPlacesMode) ? (
-                <button 
-                  onClick={() => {
-                    setGroupPlacesMode(false);
-                    resetToSearchMode();
-                  }}
-                  style={{
-                    padding: '10px 14px',
-                    fontSize: '13px',
-                    background: '#64748b',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '10px',
-                    cursor: 'pointer',
-                    fontWeight: '600',
-                    width: '100%',
-                    transition: 'all 0.2s ease',
-                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.target.style.background = '#475569';
-                    e.target.style.transform = 'translateY(-1px)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.background = '#64748b';
-                    e.target.style.transform = 'translateY(0)';
-                  }}
-                >
-                  🔍 Browse All
-                </button>
-              ) : (
-                <>
-                  <div style={{ 
-                    display: 'flex', 
-                    flexDirection: 'column', 
-                    gap: '8px',
-                    width: '100%'
-                  }}>
-                    <button
-                      onClick={() => loadPersonalList('visited')}
-                      disabled={loading}
-                      style={{
-                        padding: '10px 14px',
-                        fontSize: '13px',
-                        background: activeListView === 'visited' 
-                          ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' 
-                          : '#f0fdf4',
-                        color: activeListView === 'visited' ? 'white' : '#000000',
-                        border: `2px solid ${activeListView === 'visited' ? '#10b981' : '#bbf7d0'}`,
-                        borderRadius: '10px',
-                        cursor: loading ? 'not-allowed' : 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        fontWeight: '600',
-                        transition: 'all 0.2s ease',
-                        boxShadow: activeListView === 'visited' 
-                          ? '0 2px 8px rgba(16, 185, 129, 0.3)' 
-                          : '0 1px 2px rgba(0, 0, 0, 0.05)',
-                        opacity: loading ? 0.6 : 1,
-                        width: '100%'
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!loading && activeListView !== 'visited') {
-                          e.target.style.background = '#dcfce7';
-                          e.target.style.borderColor = '#86efac';
-                          e.target.style.transform = 'translateX(4px)';
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (activeListView !== 'visited') {
-                          e.target.style.background = '#f0fdf4';
-                          e.target.style.borderColor = '#bbf7d0';
-                          e.target.style.transform = 'translateX(0)';
-                        }
-                      }}
-                      title="Show visited places"
-                    >
-                      <span style={{ color: activeListView === 'visited' ? 'white' : '#000000' }}>✓ Visited</span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          loadListWithCurrentLocation('visited');
-                        }}
-                        disabled={loading}
-                        style={{
-                          padding: '4px 8px',
-                          fontSize: '11px',
-                          background: activeListView === 'visited' ? 'rgba(255,255,255,0.2)' : '#10b981',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: loading ? 'not-allowed' : 'pointer',
-                          fontWeight: '500',
-                          transition: 'all 0.2s ease'
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!loading) e.target.style.transform = 'scale(1.1)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.target.style.transform = 'scale(1)';
-                        }}
-                        title="Calculate distance from current location"
-                      >
-                        📍
-                      </button>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setListSearchQuery(''); // Clear search when switching lists
-                        loadPersonalList('wishlist');
-                      }}
-                      disabled={loading}
-                      style={{
-                        padding: '10px 14px',
-                        fontSize: '13px',
-                        background: activeListView === 'wishlist' 
-                          ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' 
-                          : '#fffbeb',
-                        color: activeListView === 'wishlist' ? 'white' : '#000000',
-                        border: `2px solid ${activeListView === 'wishlist' ? '#f59e0b' : '#fde68a'}`,
-                        borderRadius: '10px',
-                        cursor: loading ? 'not-allowed' : 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        fontWeight: '600',
-                        transition: 'all 0.2s ease',
-                        boxShadow: activeListView === 'wishlist' 
-                          ? '0 2px 8px rgba(245, 158, 11, 0.3)' 
-                          : '0 1px 2px rgba(0, 0, 0, 0.05)',
-                        opacity: loading ? 0.6 : 1,
-                        width: '100%'
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!loading && activeListView !== 'wishlist') {
-                          e.target.style.background = '#fef3c7';
-                          e.target.style.borderColor = '#fcd34d';
-                          e.target.style.transform = 'translateX(4px)';
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (activeListView !== 'wishlist') {
-                          e.target.style.background = '#fffbeb';
-                          e.target.style.borderColor = '#fde68a';
-                          e.target.style.transform = 'translateX(0)';
-                        }
-                      }}
-                      title="Show wishlist"
-                    >
-                      <span style={{ color: activeListView === 'wishlist' ? 'white' : '#000000' }}>★ Wishlist</span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          loadListWithCurrentLocation('wishlist');
-                        }}
-                        disabled={loading}
-                        style={{
-                          padding: '4px 8px',
-                          fontSize: '11px',
-                          background: activeListView === 'wishlist' ? 'rgba(255,255,255,0.2)' : '#f59e0b',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: loading ? 'not-allowed' : 'pointer',
-                          fontWeight: '500',
-                          transition: 'all 0.2s ease'
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!loading) e.target.style.transform = 'scale(1.1)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.target.style.transform = 'scale(1)';
-                        }}
-                        title="Calculate distance from current location"
-                      >
-                        📍
-                      </button>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setListSearchQuery(''); // Clear search when switching lists
-                        loadPersonalList('liked');
-                      }}
-                      disabled={loading}
-                      style={{
-                        padding: '10px 14px',
-                        fontSize: '13px',
-                        background: activeListView === 'liked' 
-                          ? 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)' 
-                          : '#fdf2f8',
-                        color: activeListView === 'liked' ? 'white' : '#000000',
-                        border: `2px solid ${activeListView === 'liked' ? '#ec4899' : '#fbcfe8'}`,
-                        borderRadius: '10px',
-                        cursor: loading ? 'not-allowed' : 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        fontWeight: '600',
-                        transition: 'all 0.2s ease',
-                        boxShadow: activeListView === 'liked' 
-                          ? '0 2px 8px rgba(236, 72, 153, 0.3)' 
-                          : '0 1px 2px rgba(0, 0, 0, 0.05)',
-                        opacity: loading ? 0.6 : 1,
-                        width: '100%'
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!loading && activeListView !== 'liked') {
-                          e.target.style.background = '#fce7f3';
-                          e.target.style.borderColor = '#f9a8d4';
-                          e.target.style.transform = 'translateX(4px)';
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (activeListView !== 'liked') {
-                          e.target.style.background = '#fdf2f8';
-                          e.target.style.borderColor = '#fbcfe8';
-                          e.target.style.transform = 'translateX(0)';
-                        }
-                      }}
-                      title="Show liked places"
-                    >
-                      <span style={{ color: activeListView === 'liked' ? 'white' : '#000000' }}>❤️ Liked</span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          loadListWithCurrentLocation('liked');
-                        }}
-                        disabled={loading}
-                        style={{
-                          padding: '4px 8px',
-                          fontSize: '11px',
-                          background: activeListView === 'liked' ? 'rgba(255,255,255,0.2)' : '#ec4899',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: loading ? 'not-allowed' : 'pointer',
-                          fontWeight: '500',
-                          transition: 'all 0.2s ease'
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!loading) e.target.style.transform = 'scale(1.1)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.target.style.transform = 'scale(1)';
-                        }}
-                        title="Calculate distance from current location"
-                      >
-                        📍
-                      </button>
-                    </button>
-                  </div>
-                </>
-              )}
-              <button 
-                onClick={() => {
+      {/* Top Navigation Bar */}
+      <NavBar
+        userAccount={userAccount}
+        userRole={userRole}
+        userPermissions={userPermissions}
+        onShowGroups={() => {
                   setShowGroups(true);
                   setActiveListView(null);
                   setSelectedGroupId(null);
                 }}
-                style={{
-                  padding: '4px 8px',
-                  fontSize: '11px',
-                  background: '#9C27B0',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer'
-                }}
-              >
-                👥 Groups
-              </button>
-              <button 
-                onClick={handleUserLogout}
-                style={{
-                  padding: '4px 8px',
-                  fontSize: '11px',
-                  background: '#f44336',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer'
-                }}
-              >
-                Logout Lists
-              </button>
-            </>
-          ) : (
-              <button 
-                onClick={() => {
+        onLoadPersonalList={loadPersonalList}
+        onShowUserAuth={() => {
                   setUserAuthKey(prev => prev + 1);
                   setShowUserAuth(true);
                 }}
-                style={{
-                  padding: '4px 8px',
-                  fontSize: '11px',
-                  background: '#2196F3',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer'
-                }}
-              >
-                👤 Personal Lists
-              </button>
-          )}
-          <button className="logout-button" onClick={handleLogout}>
-            Logout
-          </button>
-        </div>
-      </div>
-      )}
+        onLogout={handleLogout}
+        activeListView={activeListView}
+        onResetToSearch={resetToSearchMode}
+        onLoadPermissionDetails={loadPermissionDetails}
+        onEnableAddMode={handleEnableAddMode}
+        addingLocation={addingLocation}
+        onCSVUpload={handleCSVUpload}
+        uploadingCSV={uploadingCSV}
+        fileInputRef={fileInputRef}
+      />
+
+      {/* User Panel removed - all functionality moved to NavBar */}
 
       {/* User Auth Modal for Personal Lists */}
       {showUserAuth && (
@@ -1327,25 +905,32 @@ function App() {
           backdropFilter: 'blur(4px)',
           zIndex: 1000,
           display: 'flex',
-          alignItems: 'center',
           justifyContent: 'center',
-          overflow: 'auto',
-          animation: 'fadeIn 0.2s ease-out'
-        }}>
+          alignItems: 'center',
+          padding: '20px'
+        }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            setShowGroups(false);
+            setSelectedGroupId(null);
+          }
+        }}
+        >
           <div style={{
-            backgroundColor: '#ffffff',
+            background: 'white',
             borderRadius: '16px',
             padding: '0',
-            maxWidth: '90%',
-            width: selectedGroupId ? '900px' : '650px',
+            maxWidth: '800px',
+            width: '50%',
             maxHeight: '90vh',
             overflow: 'hidden',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
             position: 'relative',
-            boxShadow: '0 25px 70px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05)',
             display: 'flex',
-            flexDirection: 'column',
-            animation: 'slideDown 0.3s ease-out'
-          }}>
+            flexDirection: 'column'
+          }}
+          onClick={(e) => e.stopPropagation()}
+          >
             <button
               onClick={() => {
                 setShowGroups(false);
@@ -1355,36 +940,28 @@ function App() {
               }}
               style={{
                 position: 'absolute',
-                top: '12px',
-                right: '12px',
+                top: '16px',
+                right: '16px',
                 width: '32px',
                 height: '32px',
-                background: '#f5f5f5',
-                color: '#666',
-                border: '1px solid #ddd',
                 borderRadius: '50%',
+                background: 'var(--gray-200)',
+                border: 'none',
                 cursor: 'pointer',
-                zIndex: 1001,
+                fontSize: '18px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '20px',
-                lineHeight: '1',
-                padding: '0',
-                transition: 'all 0.2s',
-                fontWeight: '300'
+                transition: 'all 0.2s'
               }}
               onMouseEnter={(e) => {
-                e.target.style.background = '#f44336';
+                e.target.style.background = 'var(--error)';
                 e.target.style.color = 'white';
-                e.target.style.borderColor = '#f44336';
               }}
               onMouseLeave={(e) => {
-                e.target.style.background = '#f5f5f5';
-                e.target.style.color = '#666';
-                e.target.style.borderColor = '#ddd';
+                e.target.style.background = 'var(--gray-200)';
+                e.target.style.color = 'inherit';
               }}
-              title="Close"
             >
               ×
             </button>
@@ -1394,463 +971,146 @@ function App() {
                 onBack={() => {
                   setSelectedGroupId(null);
                   setGroupPlacesMode(false);
-                  resetToSearchMode();
                 }}
-                isShownOnMap={groupPlacesMode}
-                onShowOnMap={(places, groupName) => {
-                  if (!places || places.length === 0) {
-                    // Hide from map
-                    setGroupPlacesMode(false);
-                    resetToSearchMode();
-                  } else {
-                    // Display places on map
+                onShowOnMap={(places) => {
                     setGroupPlacesMode(true);
-                    setResults(places);
-                    setQueryInfo(`Group Places: ${groupName} (${places.length} places)`);
-                    
-                    // Create markers
-                    const newMarkers = places.map((place, index) => ({
-                      id: place.id || `group-place-${index}-${Date.now()}-${Math.random()}`,
-                      position: { 
-                        lat: place.lat, 
-                        lng: place.lon 
-                      },
-                      place: place,
-                    }));
-                    setMarkers(newMarkers);
-                    
-                    // Fit map to bounds
-                    if (map && newMarkers.length > 0) {
-                      const bounds = new window.google.maps.LatLngBounds();
-                      newMarkers.forEach(marker => {
-                        bounds.extend(marker.position);
-                      });
-                      map.fitBounds(bounds);
-                    }
-                    // Close groups modal when showing on map
+                  setResults(Array.isArray(places) ? places : []);
                     setShowGroups(false);
-                    setSelectedGroupId(null);
-                  }
                 }}
               />
             ) : (
               <Groups
-                onViewGroupPlaces={(groupId) => setSelectedGroupId(groupId)}
+                onSelectGroup={(groupId) => {
+                  setSelectedGroupId(groupId);
+                }}
+                onViewGroupPlaces={(groupId) => {
+                  console.log('📍 View Group Places clicked for group:', groupId);
+                  setSelectedGroupId(groupId);
+                }}
+                onClose={() => {
+                  setShowGroups(false);
+                  setSelectedGroupId(null);
+                }}
               />
             )}
           </div>
         </div>
       )}
 
-      {/* Permission Details Modal */}
-      {showPermissions && permissionDetails && (
-        <div 
-          style={{
-            position: 'fixed',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            background: 'white',
-            padding: '20px',
-            borderRadius: '8px',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-            zIndex: 3000,
-            maxWidth: '500px',
-            maxHeight: '80vh',
-            overflow: 'auto'
-          }}
-        >
-          <button
-            onClick={() => setShowPermissions(false)}
-            style={{
-              position: 'absolute',
-              top: '12px',
-              right: '12px',
-              width: '32px',
-              height: '32px',
-              background: '#f5f5f5',
-              color: '#666',
-              border: '1px solid #ddd',
-              borderRadius: '50%',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '20px',
-              lineHeight: '1',
-              padding: '0',
-              transition: 'all 0.2s',
-              fontWeight: '300'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = '#f44336';
-              e.target.style.color = 'white';
-              e.target.style.borderColor = '#f44336';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = '#f5f5f5';
-              e.target.style.color = '#666';
-              e.target.style.borderColor = '#ddd';
-            }}
-            title="Close"
-          >
-            ×
-          </button>
-          <h3 style={{ marginTop: 0, paddingRight: '40px' }}>🔐 Database Permissions</h3>
-          <p><strong>Current User:</strong> {permissionDetails.current_user}</p>
-          {permissionDetails.permissions && (
-            <div>
-              <h4>Table Permissions:</h4>
-              <ul>
-                <li>SELECT: {permissionDetails.permissions.can_select ? '✅ Yes' : '❌ No'}</li>
-                <li>INSERT: {permissionDetails.permissions.can_insert ? '✅ Yes' : '❌ No'}</li>
-                <li>UPDATE: {permissionDetails.permissions.can_update ? '✅ Yes' : '❌ No'}</li>
-                <li>DELETE: {permissionDetails.permissions.can_delete ? '✅ Yes' : '❌ No'}</li>
-              </ul>
-            </div>
-          )}
-          <div style={{ marginTop: '15px', padding: '10px', background: '#f5f5f5', borderRadius: '4px', fontSize: '12px' }}>
-            <strong>💡 Note:</strong> The app only uses SELECT queries (read), which is why both roles can use it. 
-            {permissionDetails.permissions && !permissionDetails.permissions.can_insert && (
-              <div style={{ marginTop: '8px', color: '#d32f2f' }}>
-                ⚠️ This user would be <strong>blocked</strong> from INSERT/UPDATE/DELETE operations by the database!
-              </div>
-            )}
-            {permissionDetails.permissions && permissionDetails.permissions.can_insert && (
-              <div style={{ marginTop: '8px', color: '#388e3c' }}>
-                ✅ This user has full access and can perform all operations!
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* CSV Upload Result Modal */}
-      {csvUploadResult && (
-        <div 
-          style={{
-            position: 'fixed',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            background: 'white',
-            padding: '20px',
-            borderRadius: '8px',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-            zIndex: 3000,
-            maxWidth: '500px',
-            maxHeight: '80vh',
-            overflow: 'auto'
-          }}
-        >
-          <button
-            onClick={() => setCsvUploadResult(null)}
-            style={{
-              position: 'absolute',
-              top: '12px',
-              right: '12px',
-              width: '32px',
-              height: '32px',
-              background: '#f5f5f5',
-              color: '#666',
-              border: '1px solid #ddd',
-              borderRadius: '50%',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '20px',
-              lineHeight: '1',
-              padding: '0',
-              transition: 'all 0.2s',
-              fontWeight: '300'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = '#f44336';
-              e.target.style.color = 'white';
-              e.target.style.borderColor = '#f44336';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = '#f5f5f5';
-              e.target.style.color = '#666';
-              e.target.style.borderColor = '#ddd';
-            }}
-            title="Close"
-          >
-            ×
-          </button>
-          <h3 style={{ marginTop: 0, paddingRight: '40px' }}>📁 CSV Upload Results</h3>
-          {csvUploadResult.summary && (
-            <div>
-              <p><strong>✅ Inserted:</strong> {csvUploadResult.summary.inserted}</p>
-              <p><strong>⏭️ Skipped:</strong> {csvUploadResult.summary.skipped}</p>
-              <p><strong>📊 Total Rows:</strong> {csvUploadResult.summary.total_rows}</p>
-            </div>
-          )}
-          {csvUploadResult.errors && csvUploadResult.errors.length > 0 && (
-            <div style={{ marginTop: '15px' }}>
-              <strong>⚠️ Errors ({csvUploadResult.error_count}):</strong>
-              <ul style={{ maxHeight: '200px', overflow: 'auto', fontSize: '12px' }}>
-                {csvUploadResult.errors.map((error, idx) => (
-                  <li key={idx}>{error}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Cancel Add Location Button (shown when in add mode) */}
-      {addingLocation && (
-        <div style={{
-          position: 'absolute',
-          top: '80px',
-          right: '10px',
-          zIndex: 2000,
-          background: 'white',
-          padding: '8px 12px',
-          borderRadius: '4px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
-        }}>
-          <span style={{ marginRight: '8px', fontSize: '13px' }}>📍 Click on map to set location</span>
-          <button
-            onClick={handleCancelAdd}
-            style={{
-              padding: '4px 8px',
-              background: '#f44336',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '11px'
-            }}
-          >
-            Cancel
-          </button>
-        </div>
-      )}
-
-      {/* Add Location Form Modal */}
+      {/* Add Location Form */}
       {showAddForm && newLocationCoords && (
-        <div 
-          style={{
+        <div style={{
             position: 'fixed',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            background: 'white',
-            padding: '24px',
-            borderRadius: '8px',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-            zIndex: 3000,
-            minWidth: '400px',
-            maxWidth: '500px'
-          }}
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          backdropFilter: 'blur(4px)',
+          zIndex: 1000,
+              display: 'flex',
+              justifyContent: 'center',
+          alignItems: 'center',
+          padding: '20px'
+        }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            handleCancelAdd();
+          }
+        }}
         >
-          <h3 style={{ marginTop: 0, marginBottom: '16px' }}>➕ Add New Location</h3>
-          
-          <div style={{ marginBottom: '12px', padding: '8px', background: '#f5f5f5', borderRadius: '4px', fontSize: '13px' }}>
-            <strong>Coordinates:</strong> {newLocationCoords.lat.toFixed(6)}, {newLocationCoords.lon.toFixed(6)}
-          </div>
-
-          <form onSubmit={handleAddLocationSubmit}>
-            <div style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
-                Name * <span style={{ color: '#666', fontSize: '12px' }}>(Required)</span>
+        <div style={{
+          background: 'white',
+            borderRadius: '16px',
+            padding: '24px',
+            maxWidth: '500px',
+            width: '100%',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+          }}
+          onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginTop: 0, marginBottom: '20px' }}>Add New Location</h2>
+            <form onSubmit={handleAddLocation}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600' }}>
+                  Name *
               </label>
               <input
                 type="text"
                 value={newLocationData.name}
-                onChange={(e) => setNewLocationData({...newLocationData, name: e.target.value})}
+                  onChange={(e) => setNewLocationData({ ...newLocationData, name: e.target.value })}
                 required
-                style={{ width: '100%', padding: '8px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
-                placeholder="e.g., New Place Name"
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '2px solid var(--border-light)',
+                    borderRadius: '8px',
+                    fontSize: '14px'
+                  }}
               />
             </div>
 
-            <div style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600' }}>
                 City
               </label>
               <input
                 type="text"
                 value={newLocationData.city}
-                onChange={(e) => setNewLocationData({...newLocationData, city: e.target.value})}
-                style={{ width: '100%', padding: '8px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
-                placeholder="e.g., Houston"
+                  onChange={(e) => setNewLocationData({ ...newLocationData, city: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '2px solid var(--border-light)',
+                    borderRadius: '8px',
+                    fontSize: '14px'
+                  }}
               />
             </div>
 
-            <div style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600' }}>
                 State
               </label>
               <input
                 type="text"
                 value={newLocationData.state}
-                onChange={(e) => setNewLocationData({...newLocationData, state: e.target.value})}
-                style={{ width: '100%', padding: '8px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
-                placeholder="e.g., Texas"
+                  onChange={(e) => setNewLocationData({ ...newLocationData, state: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '2px solid var(--border-light)',
+                    borderRadius: '8px',
+                    fontSize: '14px'
+                  }}
               />
             </div>
 
-            <div style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
-                Country
-              </label>
-              <input
-                type="text"
-                value={newLocationData.country}
-                onChange={(e) => setNewLocationData({...newLocationData, country: e.target.value})}
-                style={{ width: '100%', padding: '8px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
-                placeholder="e.g., US"
-              />
-            </div>
-
-            <div style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
-                Place Type *
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600' }}>
+                  Place Type
               </label>
               <select
                 value={newLocationData.place_type}
-                onChange={(e) => setNewLocationData({
-                  ...newLocationData, 
-                  place_type: e.target.value,
-                  type_data: {} // Reset type-specific data when changing type
-                })}
-                style={{ width: '100%', padding: '8px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
-                required
-              >
-                <option value="brewery">🍺 Brewery</option>
-                <option value="restaurant">🍽️ Restaurant</option>
-                <option value="tourist_place">🗺️ Tourist Place</option>
-                <option value="hotel">🏨 Hotel</option>
+                  onChange={(e) => setNewLocationData({ ...newLocationData, place_type: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '2px solid var(--border-light)',
+                    borderRadius: '8px',
+                    fontSize: '14px'
+                  }}
+                >
+                  <option value="brewery">Brewery</option>
+                  <option value="restaurant">Restaurant</option>
+                  <option value="tourist_place">Tourist Place</option>
+                  <option value="hotel">Hotel</option>
               </select>
             </div>
 
-            {/* Type-specific fields */}
-            {newLocationData.place_type === 'brewery' && (
-              <div style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
-                  Brewery Type
-                </label>
-                <select
-                  value={newLocationData.type_data.brewery_type || 'micro'}
-                  onChange={(e) => setNewLocationData({
-                    ...newLocationData,
-                    type_data: { ...newLocationData.type_data, brewery_type: e.target.value }
-                  })}
-                  style={{ width: '100%', padding: '8px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
-                >
-                  <option value="micro">Micro</option>
-                  <option value="nano">Nano</option>
-                  <option value="regional">Regional</option>
-                  <option value="brewpub">Brewpub</option>
-                  <option value="large">Large</option>
-                </select>
+              <div style={{ marginBottom: '16px', padding: '12px', background: 'var(--gray-50)', borderRadius: '8px', fontSize: '13px' }}>
+                <strong>Coordinates:</strong> {newLocationCoords.lat.toFixed(6)}, {newLocationCoords.lon.toFixed(6)}
               </div>
-            )}
-
-            {newLocationData.place_type === 'restaurant' && (
-              <>
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
-                    Cuisine Type
-                  </label>
-                  <input
-                    type="text"
-                    value={newLocationData.type_data.cuisine_type || ''}
-                    onChange={(e) => setNewLocationData({
-                      ...newLocationData,
-                      type_data: { ...newLocationData.type_data, cuisine_type: e.target.value }
-                    })}
-                    style={{ width: '100%', padding: '8px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
-                    placeholder="e.g., Italian, Mexican, American"
-                  />
-                </div>
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
-                    Price Range (1-4)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="4"
-                    value={newLocationData.type_data.price_range || ''}
-                    onChange={(e) => setNewLocationData({
-                      ...newLocationData,
-                      type_data: { ...newLocationData.type_data, price_range: e.target.value ? parseInt(e.target.value) : null }
-                    })}
-                    style={{ width: '100%', padding: '8px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
-                    placeholder="1=Budget, 2=Moderate, 3=Expensive, 4=Very Expensive"
-                  />
-                </div>
-              </>
-            )}
-
-            {newLocationData.place_type === 'tourist_place' && (
-              <div style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
-                  Tourist Place Type
-                </label>
-                <select
-                  value={newLocationData.type_data.tourist_type || 'Attraction'}
-                  onChange={(e) => setNewLocationData({
-                    ...newLocationData,
-                    type_data: { ...newLocationData.type_data, tourist_type: e.target.value }
-                  })}
-                  style={{ width: '100%', padding: '8px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
-                >
-                  <option value="Attraction">Attraction</option>
-                  <option value="Museum">Museum</option>
-                  <option value="Monument">Monument</option>
-                  <option value="Park">Park</option>
-                  <option value="Landmark">Landmark</option>
-                </select>
-              </div>
-            )}
-
-            {newLocationData.place_type === 'hotel' && (
-              <>
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
-                    Star Rating (1-5)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="5"
-                    value={newLocationData.type_data.star_rating || ''}
-                    onChange={(e) => setNewLocationData({
-                      ...newLocationData,
-                      type_data: { ...newLocationData.type_data, star_rating: e.target.value ? parseInt(e.target.value) : null }
-                    })}
-                    style={{ width: '100%', padding: '8px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
-                    placeholder="1-5 stars"
-                  />
-                </div>
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
-                    Amenities (comma-separated)
-                  </label>
-                  <input
-                    type="text"
-                    value={Array.isArray(newLocationData.type_data.amenities) 
-                      ? newLocationData.type_data.amenities.join(', ') 
-                      : (newLocationData.type_data.amenities || '')}
-                    onChange={(e) => {
-                      const amenities = e.target.value.split(',').map(a => a.trim()).filter(a => a);
-                      setNewLocationData({
-                        ...newLocationData,
-                        type_data: { ...newLocationData.type_data, amenities: amenities.length > 0 ? amenities : null }
-                      });
-                    }}
-                    style={{ width: '100%', padding: '8px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
-                    placeholder="e.g., WiFi, Pool, Gym, Spa"
-                  />
-                </div>
-              </>
-            )}
 
             {error && (
               <div style={{ marginBottom: '12px', padding: '8px', background: '#ffebee', color: '#c62828', borderRadius: '4px', fontSize: '13px' }}>
@@ -1894,15 +1154,38 @@ function App() {
               </button>
             </div>
           </form>
+          </div>
         </div>
       )}
 
+      {API_KEY && API_KEY.trim() !== '' ? (
       <LoadScript
         googleMapsApiKey={API_KEY}
-        libraries={['geometry']}
+          libraries={['geometry', 'places']}
+          loadingElement={<div style={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center', 
+            height: '100vh',
+            fontSize: '1.2rem',
+            color: '#000000',
+            fontWeight: '600'
+          }}>Loading Google Maps...</div>}
+          onLoad={() => {
+            console.log('✅ Google Maps API loaded successfully');
+            setError(null); // Clear any previous errors
+          }}
         onError={(error) => {
-          setError('Google Maps API failed to load. Please check your API key.');
-          console.error('Google Maps API error:', error);
+            const errorMsg = 'Google Maps API failed to load. Please check your API key and ensure Maps JavaScript API and Places API are enabled in Google Cloud Console.';
+            setError(errorMsg);
+            console.error('❌ Google Maps API error:', error);
+            console.error('💡 Make sure:');
+            console.error('   1. API key is correct and not expired');
+            console.error('   2. Maps JavaScript API is enabled');
+            console.error('   3. Places API is enabled');
+            console.error('   4. Billing is enabled on your Google Cloud project');
+            console.error('   5. API key restrictions allow localhost:3000');
+            console.error('   6. See GOOGLE_MAPS_SETUP.md for detailed instructions');
         }}
       >
         {/* Toggle button for left sidebar (Search Options) */}
@@ -1910,7 +1193,7 @@ function App() {
           onClick={() => setShowLeftSidebar(!showLeftSidebar)}
           style={{
             position: 'absolute',
-            top: '12px',
+            top: '76px', // 12px + 64px navbar
             left: '12px',
             zIndex: 1001,
             width: '32px',
@@ -1950,20 +1233,19 @@ function App() {
         {showLeftSidebar && (
           <SearchControls
             onSearch={handleSearch}
-            onLoadStats={loadStats}
-            onLoadAnalytics={loadStateAnalytics}
-            onLoadDensity={loadDensityAnalysis}
             loading={loading}
+            map={map}
           />
         )}
 
-        {/* Toggle button for right sidebar (Results & Analytics) - Bottom Right */}
+        {/* Toggle button for right sidebar (Results & Analytics) - Only show when there are results */}
+        {(results.length > 0 || showRightSidebar || activeListView) && (
         <button
           onClick={() => setShowRightSidebar(!showRightSidebar)}
           style={{
             position: 'absolute',
-            bottom: '12px',
-            right: '12px',
+              top: '76px', // Below navbar
+              right: showRightSidebar ? '424px' : '12px', // Adjust when sidebar is open
             zIndex: 1001,
             width: '32px',
             height: '32px',
@@ -1993,27 +1275,48 @@ function App() {
             e.target.style.borderColor = '#ddd';
             e.target.style.transform = 'scale(1)';
           }}
-          title={showRightSidebar ? 'Hide results & analytics' : 'Show results & analytics'}
+            title={showRightSidebar ? 'Hide results' : 'Show results'}
         >
-          {showRightSidebar ? '×' : '📊'}
+            {showRightSidebar ? (
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            ) : (
+              <span>📊</span>
+            )}
         </button>
+        )}
 
-        {/* Right Sidebar - Results & Analytics (slides from bottom) */}
-        {showRightSidebar && (
+        {/* Right Sidebar - Results & Analytics - Only show when there are results or active list */}
+        {showRightSidebar && (results.length > 0 || activeListView) && (
           <div
             style={{
               position: 'absolute',
-              bottom: '60px',
-              right: '10px',
-              width: '350px',
-              maxHeight: 'calc(100vh - 80px)',
-              background: 'white',
-              padding: '16px',
-              borderRadius: '8px',
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
-              overflowY: 'auto',
+              top: '76px', // Start below navbar (64px + 12px margin)
+              right: '12px',
+              width: '400px',
+              maxHeight: 'calc(100vh - 88px)', // Account for navbar + margins
+              background: 'rgba(255, 255, 255, 0.98)',
+              backdropFilter: 'blur(10px)',
+              padding: '20px',
+              borderRadius: '16px',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.15)',
+              border: '2px solid var(--border-light)',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
               zIndex: 1000,
-              animation: 'slideUp 0.3s ease-out'
+              animation: 'slideDown 0.3s ease-out'
             }}
           >
             <ResultsSidebar
@@ -2031,6 +1334,7 @@ function App() {
               activeListView={activeListView}
               listSearchQuery={listSearchQuery}
               onListSearchChange={setListSearchQuery}
+              onClose={() => setShowRightSidebar(false)}
             />
           </div>
         )}
@@ -2057,24 +1361,130 @@ function App() {
               position={{ lat: selectedPlace.lat, lng: selectedPlace.lon }}
               onCloseClick={() => setSelectedPlace(null)}
             >
-              <div style={{ padding: '8px' }}>
-                <strong>{selectedPlace.name || 'Unknown'}</strong>
-                <br />
-                {selectedPlace.city || ''}{selectedPlace.city && selectedPlace.state ? ', ' : ''}{selectedPlace.state || ''}
+              <div style={{
+                padding: '20px',
+                minWidth: '280px',
+                maxWidth: '320px',
+                fontFamily: 'var(--font-sans)',
+                background: 'white'
+              }}>
+                <h3 style={{
+                  margin: '0 0 10px 0',
+                  fontSize: '1.25rem',
+                  fontWeight: '900',
+                  color: '#000000',
+                  lineHeight: '1.3',
+                  letterSpacing: '-0.3px'
+                }}>
+                  {selectedPlace.name || 'Unknown'}
+                </h3>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginBottom: '12px',
+                  padding: '8px 12px',
+                  background: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
+                  borderRadius: '8px',
+                  fontSize: '0.875rem',
+                  color: '#000000',
+                  fontWeight: '700',
+                  border: '1px solid #cbd5e1'
+                }}>
+                  <span style={{ fontSize: '1rem' }}>📍</span>
+                  <span>
+                    {[selectedPlace.city, selectedPlace.state].filter(Boolean).join(', ') || 'Location unknown'}
+                  </span>
+                </div>
                 {selectedPlace.distance_km && (
-                  <>
-                    <br />
-                    <small>📍 {selectedPlace.distance_km} km away</small>
-                  </>
+                  <div style={{
+                    marginBottom: '16px',
+                    fontSize: '0.8125rem',
+                    color: '#000000',
+                    fontWeight: '700',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}>
+                    <span>📍</span>
+                    <span>{selectedPlace.distance_km.toFixed(1)} km away</span>
+                  </div>
+                )}
+                {userAccount && selectedPlace.list_status && (
+                  <div style={{
+                    marginTop: '16px',
+                    paddingTop: '16px',
+                    borderTop: '2px solid #e2e8f0'
+                  }}>
+                    <PlaceListIcons 
+                      place={selectedPlace} 
+                      listStatus={selectedPlace.list_status}
+                      onUpdate={() => {
+                        // Refresh the place data to update status
+                        const updatedPlace = results.find(p => p.id === selectedPlace.id);
+                        if (updatedPlace) {
+                          setSelectedPlace({
+                            ...updatedPlace,
+                            lat: updatedPlace.lat || updatedPlace.latitude,
+                            lon: updatedPlace.lon || updatedPlace.longitude
+                          });
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+                {!userAccount && (
+                  <div style={{
+                    marginTop: '16px',
+                    padding: '12px',
+                    background: 'linear-gradient(135deg, #fef3c7, #fde68a)',
+                    borderRadius: '10px',
+                    fontSize: '0.8125rem',
+                    color: '#000000',
+                    textAlign: 'center',
+                    fontWeight: '700',
+                    border: '2px solid #f59e0b'
+                  }}>
+                    💡 Login to save places to your lists
+                  </div>
                 )}
               </div>
             </InfoWindow>
           )}
         </GoogleMap>
       </LoadScript>
+      ) : (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100vh',
+          fontSize: '1.2rem',
+          color: '#000000',
+          fontWeight: '600',
+          background: 'linear-gradient(135deg, #fef3c7, #fde68a)'
+        }}>
+          <div style={{
+            background: 'white',
+            padding: '40px',
+            borderRadius: '20px',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+            textAlign: 'center',
+            maxWidth: '500px'
+          }}>
+            <div style={{ fontSize: '3rem', marginBottom: '20px' }}>⚠️</div>
+            <h2 style={{ color: '#000000', marginBottom: '16px' }}>API Key Missing</h2>
+            <p style={{ color: '#000000', marginBottom: '24px' }}>
+              Please set REACT_APP_GOOGLE_MAPS_API_KEY in your .env file
+            </p>
+            <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+              See GOOGLE_MAPS_SETUP.md for instructions
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 export default App;
-

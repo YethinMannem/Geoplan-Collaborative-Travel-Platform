@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Google Maps API Key Tester</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; }
+        .status { 
+            padding: 15px; 
+            margin: 15px 0; 
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover { background: #0056b3; }
+        #map { width: 100%; height: 400px; margin-top: 20px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Google Maps API Key Tester</h1>
+        
+        <div class="info">
+            <strong>Your current API key:</strong><br>
+            <code id="current-key"></code>
+        </div>
+        
+        <div>
+            <label>Or enter a different API key to test:</label>
+            <input type="text" id="api-key-input" placeholder="AIza...">
+            <button onclick="testAPIKey()">Test API Key</button>
+        </div>
+        
+        <div id="status"></div>
+        <div id="map"></div>
+    </div>
+
+    <script>
+        // Get API key from .env (you'll need to set this manually)
+        const defaultKey = 'AIzaSyCPo3wfO9ahRPGT4JY-M5obr-N2uVcGSH0';
+        document.getElementById('current-key').textContent = defaultKey || 'Not set';
+        
+        function testAPIKey() {
+            const apiKey = document.getElementById('api-key-input').value || defaultKey;
+            const statusDiv = document.getElementById('status');
+            const mapDiv = document.getElementById('map');
+            
+            if (!apiKey || apiKey.trim() === '') {
+                statusDiv.innerHTML = '<div class="error">❌ Please enter an API key</div>';
+                return;
+            }
+            
+            statusDiv.innerHTML = '<div class="info">⏳ Testing API key...</div>';
+            mapDiv.innerHTML = '';
+            
+            // Load Google Maps script
+            const script = document.createElement('script');
+            script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initMap`;
+            script.async = true;
+            script.defer = true;
+            
+            window.initMap = function() {
+                statusDiv.innerHTML = '<div class="success">✅ API Key is VALID! Maps loaded successfully.</div>';
+                
+                // Create a simple map
+                const map = new google.maps.Map(document.getElementById('map'), {
+                    center: { lat: 29.7604, lng: -95.3698 },
+                    zoom: 10
+                });
+                
+                // Test Places API
+                const service = new google.maps.places.PlacesService(map);
+                const request = {
+                    query: 'Houston, TX',
+                    fields: ['name', 'geometry']
+                };
+                
+                service.findPlaceFromQuery(request, (results, status) => {
+                    if (status === google.maps.places.PlacesServiceStatus.OK) {
+                        statusDiv.innerHTML += '<div class="success">✅ Places API is working!</div>';
+                    } else {
+                        statusDiv.innerHTML += '<div class="error">⚠️ Places API test failed: ' + status + '</div>';
+                    }
+                });
+            };
+            
+            script.onerror = function() {
+                statusDiv.innerHTML = '<div class="error">❌ Failed to load Google Maps. Check:<br>' +
+                    '1. API key is correct<br>' +
+                    '2. Maps JavaScript API is enabled<br>' +
+                    '3. Billing is enabled<br>' +
+                    '4. No domain restrictions blocking this page</div>';
+            };
+            
+            document.head.appendChild(script);
+        }
+        
+        // Auto-test on load
+        window.onload = function() {
+            if (defaultKey) {
+                setTimeout(() => testAPIKey(), 500);
+            }
+        };
+    </script>
+</body>
+</html>
+

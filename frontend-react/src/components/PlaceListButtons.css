@@ -1,49 +1,91 @@
 .place-list-buttons {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid #e0e0e0;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }
 
 .list-btn {
-  padding: 6px 12px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  background: white;
+  flex: 1;
+  min-width: 90px;
+  padding: 10px 14px;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #ffffff, #f8fafc);
   cursor: pointer;
-  font-size: 12px;
-  transition: all 0.2s;
+  font-size: 0.8125rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
+  color: #000000 !important;
+  font-weight: 700;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .list-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  border-color: #cbd5e1;
+  color: #000000 !important;
+}
+
+.list-btn:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .list-btn:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
+}
+
+.visited-btn {
+  color: #000000 !important;
 }
 
 .visited-btn.active {
-  background: #e3f2fd;
-  border-color: #2196f3;
-  color: #1976d2;
+  background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+  border-color: #3b82f6;
+  color: #000000 !important;
+  font-weight: 800;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.visited-btn.active:hover:not(:disabled) {
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+  transform: translateY(-2px);
+  color: #000000 !important;
 }
 
 .wishlist-btn.active {
-  background: #fff3e0;
-  border-color: #ff9800;
-  color: #f57c00;
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  border-color: #f59e0b;
+  color: #000000;
+  font-weight: 800;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+.wishlist-btn.active:hover:not(:disabled) {
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
+  transform: translateY(-2px);
 }
 
 .liked-btn.active {
-  background: #fce4ec;
-  border-color: #e91e63;
-  color: #c2185b;
+  background: linear-gradient(135deg, #fce7f3, #fbcfe8);
+  border-color: #ec4899;
+  color: #000000;
+  font-weight: 800;
+  box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3);
+}
+
+.liked-btn.active:hover:not(:disabled) {
+  box-shadow: 0 6px 20px rgba(236, 72, 153, 0.4);
+  transform: translateY(-2px);
 }
 
 .list-error {

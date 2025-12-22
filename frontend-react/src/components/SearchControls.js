@@ -1,367 +1,787 @@
 import React, { useState } from 'react';
 
-function SearchControls({ onSearch, onLoadStats, onLoadAnalytics, onLoadDensity, loading }) {
+// Place type configuration
+const PLACE_TYPES = [
+  { value: 'brewery', label: 'Brewery', icon: '🍺', color: '#8B4513', bgColor: '#F5E6D3' },
+  { value: 'restaurant', label: 'Restaurant', icon: '🍽️', color: '#FF6B6B', bgColor: '#FFE5E5' },
+  { value: 'tourist_place', label: 'Tourist Place', icon: '🗺️', color: '#4ECDC4', bgColor: '#E0F7F5' },
+  { value: 'hotel', label: 'Hotel', icon: '🏨', color: '#95E1D3', bgColor: '#E8F8F5' },
+];
+
+// US States with approximate center coordinates
+const US_STATES = [
+  { code: 'AL', name: 'Alabama', lat: 32.806671, lon: -86.791130 },
+  { code: 'AK', name: 'Alaska', lat: 61.370716, lon: -152.404419 },
+  { code: 'AZ', name: 'Arizona', lat: 33.729759, lon: -111.431221 },
+  { code: 'AR', name: 'Arkansas', lat: 34.969704, lon: -92.373123 },
+  { code: 'CA', name: 'California', lat: 36.116203, lon: -119.681564 },
+  { code: 'CO', name: 'Colorado', lat: 39.059811, lon: -105.311104 },
+  { code: 'CT', name: 'Connecticut', lat: 41.597782, lon: -72.755371 },
+  { code: 'DE', name: 'Delaware', lat: 39.318523, lon: -75.507141 },
+  { code: 'FL', name: 'Florida', lat: 27.766279, lon: -81.686783 },
+  { code: 'GA', name: 'Georgia', lat: 33.040619, lon: -83.643074 },
+  { code: 'HI', name: 'Hawaii', lat: 21.094318, lon: -157.498337 },
+  { code: 'ID', name: 'Idaho', lat: 44.240459, lon: -114.478828 },
+  { code: 'IL', name: 'Illinois', lat: 40.349457, lon: -88.986137 },
+  { code: 'IN', name: 'Indiana', lat: 39.849426, lon: -86.258278 },
+  { code: 'IA', name: 'Iowa', lat: 42.011539, lon: -93.210526 },
+  { code: 'KS', name: 'Kansas', lat: 38.526600, lon: -96.726486 },
+  { code: 'KY', name: 'Kentucky', lat: 37.668140, lon: -84.670067 },
+  { code: 'LA', name: 'Louisiana', lat: 31.169546, lon: -91.867805 },
+  { code: 'ME', name: 'Maine', lat: 44.323535, lon: -69.765261 },
+  { code: 'MD', name: 'Maryland', lat: 39.063946, lon: -76.802101 },
+  { code: 'MA', name: 'Massachusetts', lat: 42.230171, lon: -71.530106 },
+  { code: 'MI', name: 'Michigan', lat: 43.326618, lon: -84.536095 },
+  { code: 'MN', name: 'Minnesota', lat: 45.694454, lon: -93.900192 },
+  { code: 'MS', name: 'Mississippi', lat: 32.741646, lon: -89.678696 },
+  { code: 'MO', name: 'Missouri', lat: 38.456085, lon: -92.288368 },
+  { code: 'MT', name: 'Montana', lat: 46.921925, lon: -110.454353 },
+  { code: 'NE', name: 'Nebraska', lat: 41.125370, lon: -98.268082 },
+  { code: 'NV', name: 'Nevada', lat: 38.313515, lon: -117.055374 },
+  { code: 'NH', name: 'New Hampshire', lat: 43.452492, lon: -71.563896 },
+  { code: 'NJ', name: 'New Jersey', lat: 40.298904, lon: -74.521011 },
+  { code: 'NM', name: 'New Mexico', lat: 34.840515, lon: -106.248482 },
+  { code: 'NY', name: 'New York', lat: 42.165726, lon: -74.948051 },
+  { code: 'NC', name: 'North Carolina', lat: 35.630066, lon: -79.806419 },
+  { code: 'ND', name: 'North Dakota', lat: 47.528912, lon: -99.784012 },
+  { code: 'OH', name: 'Ohio', lat: 40.388783, lon: -82.764915 },
+  { code: 'OK', name: 'Oklahoma', lat: 35.565342, lon: -96.928917 },
+  { code: 'OR', name: 'Oregon', lat: 44.572021, lon: -122.070938 },
+  { code: 'PA', name: 'Pennsylvania', lat: 40.590752, lon: -77.209755 },
+  { code: 'RI', name: 'Rhode Island', lat: 41.680893, lon: -71.51178 },
+  { code: 'SC', name: 'South Carolina', lat: 33.856892, lon: -80.945007 },
+  { code: 'SD', name: 'South Dakota', lat: 44.299782, lon: -99.438828 },
+  { code: 'TN', name: 'Tennessee', lat: 35.747845, lon: -86.692345 },
+  { code: 'TX', name: 'Texas', lat: 31.054487, lon: -97.563461 },
+  { code: 'UT', name: 'Utah', lat: 40.150032, lon: -111.862434 },
+  { code: 'VT', name: 'Vermont', lat: 44.045876, lon: -72.710686 },
+  { code: 'VA', name: 'Virginia', lat: 37.769337, lon: -78.169968 },
+  { code: 'WA', name: 'Washington', lat: 47.400902, lon: -121.490494 },
+  { code: 'WV', name: 'West Virginia', lat: 38.491226, lon: -80.954453 },
+  { code: 'WI', name: 'Wisconsin', lat: 44.268543, lon: -89.616508 },
+  { code: 'WY', name: 'Wyoming', lat: 42.755966, lon: -107.302490 },
+];
+
+function SearchControls({ onSearch, loading, map }) {
   const [queryType, setQueryType] = useState('radius');
-  const [lat, setLat] = useState('29.7604');
-  const [lon, setLon] = useState('-95.3698');
+  const [selectedState, setSelectedState] = useState(null);
   const [km, setKm] = useState('25');
   const [k, setK] = useState('10');
-  const [north, setNorth] = useState('30.0');
-  const [south, setSouth] = useState('29.5');
-  const [east, setEast] = useState('-95.0');
-  const [west, setWest] = useState('-95.5');
-  const [stateFilter, setStateFilter] = useState('');
-  const [nameFilter, setNameFilter] = useState('');
-  const [placeTypeFilter, setPlaceTypeFilter] = useState([]); // Array of selected place types
+  const [placeTypeFilter, setPlaceTypeFilter] = useState([]);
+  const [gettingLocation, setGettingLocation] = useState(false);
+
+  // Handle state selection
+  const handleStateChange = (e) => {
+    const stateCode = e.target.value;
+    if (stateCode) {
+      const state = US_STATES.find(s => s.code === stateCode);
+      if (state) {
+        setSelectedState(state);
+        // Center map on selected state
+        if (map && typeof map.setCenter === 'function') {
+          try {
+            map.setCenter({ lat: state.lat, lng: state.lon });
+            map.setZoom(7);
+          } catch (mapError) {
+            console.warn('Could not center map:', mapError);
+          }
+        }
+      }
+    } else {
+      setSelectedState(null);
+    }
+  };
+
+  const clearLocation = () => {
+    setSelectedState(null);
+  };
+
+  const handleUseMyLocation = async () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not available in your browser');
+      return;
+    }
+
+    setGettingLocation(true);
+    try {
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        });
+      });
+
+      const lat = position.coords.latitude;
+      const lon = position.coords.longitude;
+      
+      // Find the closest state to user's location
+      let closestState = null;
+      let minDistance = Infinity;
+      
+      US_STATES.forEach(state => {
+        const distance = Math.sqrt(
+          Math.pow(lat - state.lat, 2) + Math.pow(lon - state.lon, 2)
+        );
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestState = state;
+        }
+      });
+      
+      if (closestState) {
+        setSelectedState(closestState);
+        // Center map on user's location
+        if (map && typeof map.setCenter === 'function') {
+          try {
+            map.setCenter({ lat, lng: lon });
+            map.setZoom(10);
+          } catch (mapError) {
+            console.warn('Could not center map:', mapError);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error getting location:', error);
+      alert('Failed to get your location. Please try again or select a state.');
+    } finally {
+      setGettingLocation(false);
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    if (!selectedState) {
+      alert('Please select a state first');
+      return;
+    }
 
     const searchParams = {
       type: queryType,
-      state: stateFilter.trim() || undefined,
-      name: nameFilter.trim() || undefined,
-      place_type: placeTypeFilter.length > 0 ? placeTypeFilter.join(',') : undefined,
+      lat: selectedState.lat,
+      lon: selectedState.lon,
+      state: selectedState.name, // Send state name to backend for filtering
+      ...(queryType === 'radius' ? { km: parseFloat(km) || 25 } : { k: parseInt(k) || 10 }),
+      ...(placeTypeFilter.length > 0 && { place_type: placeTypeFilter[0] }),
     };
 
-    if (queryType === 'radius') {
-      const latVal = parseFloat(lat);
-      const lonVal = parseFloat(lon);
-      const kmVal = parseFloat(km);
-      
-      if (isNaN(latVal) || isNaN(lonVal) || isNaN(kmVal)) {
-        alert('Please enter valid numbers for latitude, longitude, and radius');
-        return;
-      }
-      
-      searchParams.lat = latVal;
-      searchParams.lon = lonVal;
-      searchParams.km = kmVal;
-    } else if (queryType === 'nearest') {
-      const latVal = parseFloat(lat);
-      const lonVal = parseFloat(lon);
-      const kVal = parseInt(k);
-      
-      if (isNaN(latVal) || isNaN(lonVal) || isNaN(kVal)) {
-        alert('Please enter valid numbers for latitude, longitude, and K');
-        return;
-      }
-      
-      searchParams.lat = latVal;
-      searchParams.lon = lonVal;
-      searchParams.k = kVal;
-    } else if (queryType === 'bbox') {
-      const northVal = parseFloat(north);
-      const southVal = parseFloat(south);
-      const eastVal = parseFloat(east);
-      const westVal = parseFloat(west);
-      
-      if (isNaN(northVal) || isNaN(southVal) || isNaN(eastVal) || isNaN(westVal)) {
-        alert('Please enter valid numbers for all bounding box coordinates');
-        return;
-      }
-      
-      searchParams.north = northVal;
-      searchParams.south = southVal;
-      searchParams.east = eastVal;
-      searchParams.west = westVal;
-    }
-
-    // Always trigger search with new parameters
     onSearch(searchParams);
   };
 
+  const togglePlaceType = (type) => {
+    setPlaceTypeFilter(prev => 
+      prev.includes(type) ? prev.filter(t => t !== type) : [type]
+    );
+  };
+
+  const hasLocation = !!selectedState;
+
   return (
     <div className="controls">
-      <h3>🔍 Search Options</h3>
-
-      <div className="query-tabs">
-        <button
-          type="button"
-          className={queryType === 'radius' ? 'active' : ''}
-          onClick={() => setQueryType('radius')}
-        >
-          Radius
-        </button>
-        <button
-          type="button"
-          className={queryType === 'nearest' ? 'active' : ''}
-          onClick={() => setQueryType('nearest')}
-        >
-          Nearest K
-        </button>
-        <button
-          type="button"
-          className={queryType === 'bbox' ? 'active' : ''}
-          onClick={() => setQueryType('bbox')}
-        >
-          Bounding Box
-        </button>
-      </div>
+      <h3 style={{ 
+        marginBottom: '24px',
+        fontSize: '1.75rem',
+        fontWeight: '800',
+        color: '#000000',
+        letterSpacing: '-0.5px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px'
+      }}>
+        <span style={{ fontSize: '2rem' }}>🔍</span>
+        <span style={{ color: '#000000' }}>Find Places</span>
+      </h3>
 
       <form onSubmit={handleSubmit}>
-        {queryType === 'radius' && (
-          <>
-            <div className="form-group">
-              <label>Latitude</label>
-              <input
-                type="number"
-                step="any"
-                value={lat}
-                onChange={(e) => setLat(e.target.value)}
-                required
-              />
+        {/* Location Selection - Primary Action */}
+        <div className="form-group" style={{ 
+          marginBottom: '24px',
+          padding: '20px',
+          background: 'linear-gradient(135deg, #eef2ff, #e0e7ff)',
+          borderRadius: '16px',
+          border: '2px solid #c7d2fe',
+          boxShadow: '0 2px 8px rgba(99, 102, 241, 0.1)'
+        }}>
+          <label style={{ 
+            fontSize: '0.9375rem', 
+            fontWeight: '800', 
+            color: '#000000',
+            marginBottom: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px'
+          }}>
+            <span style={{ fontSize: '1.375rem' }}>📍</span>
+            <span style={{ color: '#000000' }}>Where to search?</span>
+          </label>
+
+          {/* Use My Location Button */}
+          <button
+            type="button"
+            onClick={handleUseMyLocation}
+            disabled={gettingLocation}
+            style={{
+              width: '100%',
+              padding: '14px 18px',
+              fontSize: '0.9375rem',
+              fontWeight: '800',
+              background: gettingLocation 
+                ? 'linear-gradient(135deg, #9ca3af, #6b7280)' 
+                : 'linear-gradient(135deg, #6366f1, #4f46e5)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '12px',
+              cursor: gettingLocation ? 'not-allowed' : 'pointer',
+              boxShadow: gettingLocation 
+                ? 'none' 
+                : '0 4px 12px rgba(99, 102, 241, 0.4)',
+              transition: 'all 0.2s',
+              marginBottom: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '10px',
+              textTransform: 'uppercase',
+              letterSpacing: '1px'
+            }}
+            onMouseEnter={(e) => {
+              if (!gettingLocation) {
+                e.target.style.transform = 'translateY(-2px)';
+                e.target.style.boxShadow = '0 6px 16px rgba(99, 102, 241, 0.5)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!gettingLocation) {
+                e.target.style.transform = 'translateY(0)';
+                e.target.style.boxShadow = '0 4px 12px rgba(99, 102, 241, 0.4)';
+              }
+            }}
+          >
+            <span style={{ fontSize: '1.25rem' }}>
+              {gettingLocation ? '⏳' : '📍'}
+            </span>
+            <span>{gettingLocation ? 'Getting Location...' : 'Use My Location'}</span>
+          </button>
+
+          <div style={{ 
+            textAlign: 'center', 
+            margin: '16px 0',
+            fontSize: '0.875rem',
+            fontWeight: '700',
+            color: '#000000'
+          }}>
+            OR
+          </div>
+
+          {/* State Selection Dropdown */}
+          <div style={{ position: 'relative' }}>
+            <select
+              value={selectedState?.code || ''}
+              onChange={handleStateChange}
+              style={{
+                width: '100%',
+                padding: '14px 16px',
+                paddingRight: hasLocation ? '50px' : '16px',
+                fontSize: '0.9375rem',
+                fontWeight: '600',
+                border: '2px solid #c7d2fe',
+                borderRadius: '12px',
+                background: 'white',
+                color: '#000000',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                transition: 'all 0.2s',
+                cursor: 'pointer',
+                appearance: 'none',
+                backgroundImage: hasLocation 
+                  ? 'none'
+                  : 'url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%236366f1\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3e%3cpolyline points=\'6 9 12 15 18 9\'%3e%3c/polyline%3e%3c/svg%3e")',
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right 12px center',
+                backgroundSize: '20px'
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = '#6366f1';
+                e.target.style.boxShadow = '0 4px 12px rgba(99, 102, 241, 0.2)';
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = '#c7d2fe';
+                e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+              }}
+            >
+              <option value="">Select a state...</option>
+              {US_STATES.map(state => (
+                <option key={state.code} value={state.code}>
+                  {state.name}
+                </option>
+              ))}
+            </select>
+            {hasLocation && (
+        <button
+          type="button"
+                onClick={clearLocation}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: '#ef4444',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '28px',
+                  height: '28px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '16px',
+                  fontWeight: '700',
+                  boxShadow: '0 2px 4px rgba(239, 68, 68, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = '#dc2626';
+                  e.target.style.transform = 'translateY(-50%) scale(1.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = '#ef4444';
+                  e.target.style.transform = 'translateY(-50%) scale(1)';
+                }}
+              >
+                ✕
+        </button>
+            )}
+          </div>
+
+          {/* Selected State Info */}
+          {hasLocation && selectedState && (
+            <div style={{
+              padding: '16px 18px',
+              background: 'white',
+              borderRadius: '12px',
+              marginTop: '16px',
+              border: '2px solid #6366f1',
+              fontSize: '0.875rem',
+              fontWeight: '600',
+              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.2)',
+              animation: 'fadeIn 0.3s ease-out'
+            }}>
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '12px',
+                marginBottom: '8px'
+              }}>
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '18px',
+                  color: 'white',
+                  fontWeight: '800',
+                  boxShadow: '0 2px 8px rgba(99, 102, 241, 0.4)'
+                }}>
+                  ✓
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ 
+                    fontWeight: '800', 
+                    color: '#000000',
+                    fontSize: '1rem',
+                    marginBottom: '4px',
+                    lineHeight: '1.4'
+                  }}>
+                    {selectedState.name}
+                  </div>
+                  <div style={{ 
+                    fontSize: '0.8125rem', 
+                    color: '#000000',
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: '600'
+                  }}>
+                    {selectedState.lat.toFixed(4)}, {selectedState.lon.toFixed(4)}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="form-group">
-              <label>Longitude</label>
-              <input
-                type="number"
-                step="any"
-                value={lon}
-                onChange={(e) => setLon(e.target.value)}
-                required
-              />
+          )}
+        </div>
+
+        {/* Search Type Toggle */}
+        <div className="form-group" style={{ marginBottom: '24px' }}>
+          <label style={{ 
+            fontSize: '0.9375rem', 
+            fontWeight: '800', 
+            color: '#000000',
+            marginBottom: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}>
+            <span style={{ fontSize: '1.375rem' }}>🔎</span>
+            <span style={{ color: '#000000' }}>Search Type</span>
+          </label>
+          <div style={{
+            display: 'flex',
+            gap: '8px',
+            background: '#f3f4f6',
+            padding: '4px',
+            borderRadius: '12px',
+            border: '2px solid #e5e7eb'
+          }}>
+        <button
+          type="button"
+              onClick={() => setQueryType('radius')}
+              style={{
+                flex: 1,
+                padding: '12px 16px',
+                fontSize: '0.875rem',
+                fontWeight: '800',
+                background: queryType === 'radius' 
+                  ? 'linear-gradient(135deg, #6366f1, #4f46e5)' 
+                  : 'transparent',
+                color: queryType === 'radius' ? 'white' : '#000000',
+                border: 'none',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: queryType === 'radius' ? '0 2px 8px rgba(99, 102, 241, 0.3)' : 'none'
+              }}
+            >
+              Within Radius
+        </button>
+        <button
+          type="button"
+              onClick={() => setQueryType('nearest')}
+              style={{
+                flex: 1,
+                padding: '12px 16px',
+                fontSize: '0.875rem',
+                fontWeight: '800',
+                background: queryType === 'nearest' 
+                  ? 'linear-gradient(135deg, #6366f1, #4f46e5)' 
+                  : 'transparent',
+                color: queryType === 'nearest' ? 'white' : '#000000',
+                border: 'none',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: queryType === 'nearest' ? '0 2px 8px rgba(99, 102, 241, 0.3)' : 'none'
+              }}
+            >
+              Nearest Places
+        </button>
+      </div>
             </div>
-            <div className="form-group">
-              <label>Radius (km)</label>
+
+        {/* Search Radius or Number of Results */}
+        {queryType === 'radius' ? (
+          <div className="form-group" style={{ marginBottom: '24px' }}>
+            <label style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '12px'
+            }}>
+              <span style={{ 
+                fontSize: '0.9375rem', 
+                fontWeight: '800', 
+                color: '#000000'
+              }}>
+                Search Radius
+              </span>
+              <span style={{ 
+                fontSize: '0.8125rem', 
+                color: '#000000',
+                fontWeight: '700'
+              }}>
+                (km)
+              </span>
+            </label>
+            <div style={{ 
+              display: 'flex', 
+              gap: '12px', 
+              alignItems: 'center',
+              padding: '12px',
+              background: '#f9fafb',
+              borderRadius: '12px',
+              border: '2px solid #e5e7eb'
+            }}>
               <input
-                type="number"
-                step="any"
-                min="0.1"
+                type="range"
+                min="1"
+                max="100"
                 value={km}
                 onChange={(e) => setKm(e.target.value)}
-                required
+                style={{ 
+                  flex: 1,
+                  height: '8px',
+                  borderRadius: '4px',
+                  background: '#e5e7eb',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
               />
-            </div>
-          </>
-        )}
-
-        {queryType === 'nearest' && (
-          <>
-            <div className="form-group">
-              <label>Latitude</label>
               <input
                 type="number"
-                step="any"
-                value={lat}
-                onChange={(e) => setLat(e.target.value)}
-                required
+                min="1"
+                max="100"
+                value={km}
+                onChange={(e) => {
+                  const val = Math.min(100, Math.max(1, parseInt(e.target.value) || 1));
+                  setKm(val.toString());
+                }}
+                style={{ 
+                  width: '70px',
+                  padding: '10px',
+                  textAlign: 'center',
+                  fontWeight: '800',
+                  fontSize: '0.9375rem',
+                  border: '2px solid #6366f1',
+                  borderRadius: '8px',
+                  background: 'white',
+                  color: '#000000'
+                }}
               />
             </div>
-            <div className="form-group">
-              <label>Longitude</label>
+            <div style={{ 
+              fontSize: '0.875rem', 
+              color: '#000000', 
+              marginTop: '10px',
+              textAlign: 'center',
+              fontWeight: '800',
+              background: 'linear-gradient(135deg, #eef2ff, #e0e7ff)',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid #c7d2fe'
+            }}>
+              {km} km radius • ~{Math.round(parseFloat(km) * 0.621371)} miles
+            </div>
+          </div>
+        ) : (
+          <div className="form-group" style={{ marginBottom: '24px' }}>
+            <label style={{
+              fontSize: '0.9375rem', 
+              fontWeight: '800', 
+              color: '#000000',
+              marginBottom: '12px',
+              display: 'block'
+            }}>
+              Number of Results
+            </label>
+            <div style={{ 
+              display: 'flex', 
+              gap: '12px', 
+              alignItems: 'center',
+              padding: '12px',
+              background: '#f9fafb',
+              borderRadius: '12px',
+              border: '2px solid #e5e7eb'
+            }}>
               <input
-                type="number"
-                step="any"
-                value={lon}
-                onChange={(e) => setLon(e.target.value)}
-                required
+                type="range"
+                min="1"
+                max="50"
+                value={k}
+                onChange={(e) => setK(e.target.value)}
+                style={{ 
+                  flex: 1,
+                  height: '8px',
+                  borderRadius: '4px',
+                  background: '#e5e7eb',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
               />
-            </div>
-            <div className="form-group">
-              <label>Number of Results (K)</label>
               <input
                 type="number"
                 min="1"
                 max="100"
                 value={k}
-                onChange={(e) => setK(e.target.value)}
-                required
+                onChange={(e) => {
+                  const val = Math.min(100, Math.max(1, parseInt(e.target.value) || 1));
+                  setK(val.toString());
+                }}
+                style={{ 
+                  width: '70px',
+                  padding: '10px',
+                  textAlign: 'center',
+                  fontWeight: '800',
+                  fontSize: '0.9375rem',
+                  border: '2px solid #6366f1',
+                  borderRadius: '8px',
+                  background: 'white',
+                  color: '#000000'
+                }}
               />
             </div>
-          </>
+            <div style={{ 
+              fontSize: '0.875rem', 
+              color: '#000000', 
+              marginTop: '10px',
+              textAlign: 'center',
+              fontWeight: '800',
+              background: 'linear-gradient(135deg, #eef2ff, #e0e7ff)',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid #c7d2fe'
+            }}>
+              Show {k} nearest {parseInt(k) === 1 ? 'place' : 'places'}
+            </div>
+            </div>
         )}
 
-        {queryType === 'bbox' && (
-          <>
-            <div className="form-group">
-              <label>North</label>
-              <input
-                type="number"
-                step="any"
-                value={north}
-                onChange={(e) => setNorth(e.target.value)}
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>South</label>
-              <input
-                type="number"
-                step="any"
-                value={south}
-                onChange={(e) => setSouth(e.target.value)}
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>East</label>
-              <input
-                type="number"
-                step="any"
-                value={east}
-                onChange={(e) => setEast(e.target.value)}
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>West</label>
-              <input
-                type="number"
-                step="any"
-                value={west}
-                onChange={(e) => setWest(e.target.value)}
-                required
-              />
-            </div>
-          </>
-        )}
-
-        <div className="form-group">
-          <label>Filter by State (optional)</label>
-          <input
-            type="text"
-            value={stateFilter}
-            onChange={(e) => setStateFilter(e.target.value)}
-            placeholder="e.g., Texas"
-          />
-        </div>
-
-        <div className="form-group">
-          <label>Filter by Name (optional)</label>
-          <input
-            type="text"
-            value={nameFilter}
-            onChange={(e) => setNameFilter(e.target.value)}
-            placeholder="e.g., Brewery"
-          />
-        </div>
-
-        <div className="form-group">
-          <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.95em', fontWeight: '500', color: '#333' }}>
-            Place Type (optional)
+        {/* Place Type Filters - Optional */}
+        <div className="form-group" style={{ marginBottom: '24px' }}>
+          <label style={{ 
+            fontSize: '0.9375rem', 
+            fontWeight: '800', 
+            color: '#000000',
+            marginBottom: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}>
+            <span style={{ fontSize: '1.375rem' }}>🏷️</span>
+            <span style={{ color: '#000000' }}>Filter by Type</span>
+            <span style={{ 
+              fontSize: '0.8125rem', 
+              fontWeight: '600',
+              color: '#000000',
+              marginLeft: '4px'
+            }}>
+              (optional)
+            </span>
           </label>
           <div style={{ 
             display: 'grid', 
             gridTemplateColumns: 'repeat(2, 1fr)', 
-            gap: '8px', 
-            marginBottom: '4px',
-            width: '100%'
+            gap: '10px'
           }}>
-            {['brewery', 'restaurant', 'tourist_place', 'hotel'].map(type => {
-              const labelText = type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
-              const isSelected = placeTypeFilter.includes(type);
+            {PLACE_TYPES.map(type => {
+              const isSelected = placeTypeFilter.includes(type.value);
               return (
-                <label
-                  key={type}
+                <button
+                  key={type.value}
+                  type="button"
+                  onClick={() => togglePlaceType(type.value)}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
+                    padding: '14px 12px',
+                    background: isSelected 
+                      ? type.bgColor 
+                      : '#f9fafb',
+                    border: `2px solid ${isSelected ? type.color : '#e5e7eb'}`,
+                    borderRadius: '12px',
                     cursor: 'pointer',
-                    fontSize: '0.9em',
-                    fontWeight: '500',
-                    padding: '8px 12px',
-                    borderRadius: '4px',
-                    backgroundColor: isSelected ? '#4a90e2' : '#f0f0f0',
-                    color: isSelected ? 'white' : '#333',
                     transition: 'all 0.2s',
-                    border: '1px solid #ddd',
-                    width: '100%',
-                    boxSizing: 'border-box',
-                    minHeight: '36px'
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: isSelected 
+                      ? `0 4px 12px ${type.color}30` 
+                      : '0 1px 3px rgba(0,0,0,0.1)'
                   }}
-                  title={labelText}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) {
+                      e.target.style.background = '#f3f4f6';
+                      e.target.style.borderColor = type.color;
+                      e.target.style.transform = 'translateY(-2px)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) {
+                      e.target.style.background = '#f9fafb';
+                      e.target.style.borderColor = '#e5e7eb';
+                      e.target.style.transform = 'translateY(0)';
+                    }
+                  }}
                 >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setPlaceTypeFilter([...placeTypeFilter, type]);
-                      } else {
-                        setPlaceTypeFilter(placeTypeFilter.filter(t => t !== type));
-                      }
-                    }}
-                    style={{ 
-                      marginRight: '8px', 
-                      cursor: 'pointer', 
-                      flexShrink: 0,
-                      width: '16px',
-                      height: '16px'
-                    }}
-                  />
+                  <span style={{ fontSize: '2rem' }}>{type.icon}</span>
                   <span style={{ 
-                    userSelect: 'none', 
-                    whiteSpace: 'nowrap', 
-                    overflow: 'visible', 
-                    color: isSelected ? 'white' : '#333',
-                    fontWeight: '500',
-                    fontSize: '0.9em',
-                    lineHeight: '1.2'
-                  }}>{labelText}</span>
-                </label>
+                    fontSize: '0.875rem',
+                    textAlign: 'center',
+                    lineHeight: '1.3',
+                    fontWeight: '700',
+                    color: '#000000'
+                  }}>
+                    {type.label}
+                  </span>
+                </button>
               );
             })}
           </div>
-          {placeTypeFilter.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setPlaceTypeFilter([])}
-              style={{
-                fontSize: '0.85em',
-                fontWeight: '600',
-                padding: '8px 12px',
-                border: 'none',
-                borderRadius: '4px',
-                backgroundColor: '#ff6b6b',
-                color: 'white',
-                cursor: 'pointer',
-                marginTop: '8px',
-                width: '100%'
-              }}
-            >
-              Clear All
-            </button>
-          )}
-          <small style={{ color: '#666', fontSize: '0.75em', display: 'block', marginTop: '4px' }}>
-            Select one or more types, or leave empty to show all
-          </small>
         </div>
 
-        <button type="submit" disabled={loading}>
-          {loading ? 'Searching...' : 'Search'}
+        {/* Primary Search Button */}
+            <button
+          type="submit" 
+          disabled={loading || !hasLocation}
+              style={{
+            width: '100%',
+            padding: '18px',
+            fontSize: '1rem',
+            fontWeight: '800',
+            background: (!hasLocation || loading) 
+              ? '#9ca3af' 
+              : 'linear-gradient(135deg, #6366f1, #4f46e5)',
+            color: 'white',
+                border: 'none',
+            borderRadius: '14px',
+            cursor: (!hasLocation || loading) ? 'not-allowed' : 'pointer',
+            boxShadow: (!hasLocation || loading) 
+              ? 'none' 
+              : '0 6px 20px rgba(99, 102, 241, 0.5)',
+            transition: 'all 0.2s',
+            textTransform: 'uppercase',
+            letterSpacing: '1.5px',
+                marginTop: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '10px',
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+          onMouseEnter={(e) => {
+            if (hasLocation && !loading) {
+              e.target.style.transform = 'translateY(-3px)';
+              e.target.style.boxShadow = '0 8px 25px rgba(99, 102, 241, 0.6)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (hasLocation && !loading) {
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = '0 6px 20px rgba(99, 102, 241, 0.5)';
+            }
+          }}
+        >
+          {loading ? (
+            <>
+              <span style={{ fontSize: '1.25rem', animation: 'pulse 1.5s ease-in-out infinite' }}>⏳</span>
+              <span style={{ fontWeight: '800', fontSize: '1rem', color: 'white' }}>Searching...</span>
+            </>
+          ) : hasLocation ? (
+            <>
+              <span style={{ fontSize: '1.25rem' }}>🔍</span>
+              <span style={{ fontWeight: '800', fontSize: '1rem', color: 'white' }}>Search Places</span>
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: '1.25rem' }}>📍</span>
+              <span style={{ fontWeight: '800', fontSize: '1rem', color: 'white' }}>Select Location First</span>
+            </>
+          )}
         </button>
       </form>
-
-      <button
-        type="button"
-        className="secondary"
-        onClick={onLoadStats}
-        style={{ marginTop: '8px' }}
-      >
-        Load Stats
-      </button>
-
-      <button
-        type="button"
-        className="orange"
-        onClick={onLoadAnalytics}
-        style={{ marginTop: '8px' }}
-      >
-        State Analytics
-      </button>
-
-      <button
-        type="button"
-        className="purple"
-        onClick={() => onLoadDensity({ lat: parseFloat(lat) || 29.7604, lon: parseFloat(lon) || -95.3698, km: parseFloat(km) || 100 })}
-        style={{ marginTop: '8px' }}
-      >
-        Density Analysis
-      </button>
     </div>
   );
 }
 
 export default SearchControls;
-

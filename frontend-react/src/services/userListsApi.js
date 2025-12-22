@@ -1,6 +1,6 @@
 import { setAuthToken, getAuthToken } from './api';
 
-const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:5000';
+const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:5001';
 
 async function fetchAPI(endpoint, options = {}) {
   const token = getAuthToken();
@@ -173,5 +173,9 @@ export async function removeGroupMember(groupId, memberId) {
 
 export async function getGroupPlaces(groupId) {
   return fetchAPI(`/api/groups/${groupId}/places`);
+}
+
+export async function getPlaceGroups(placeId) {
+  return fetchAPI(`/api/places/${placeId}/groups`);
 }
 
