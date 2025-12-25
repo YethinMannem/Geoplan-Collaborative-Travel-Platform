@@ -620,7 +620,19 @@ def within_radius():
         COALESCE(r.phone, tp.phone, h.phone, b.phone) as phone,
         COALESCE(r.website, tp.website, h.website, b.website) as website,
         r.cuisine_type, r.price_range,
+        r.hours_of_operation,
+        r.dietary_options,
+        r.outdoor_seating,
+        r.delivery,
+        r.takeout,
+        r.reservations,
         tp.entry_fee, tp.description,
+        tp.place_type as tourist_type,
+        tp.family_friendly,
+        tp.accessibility,
+        tp.pet_friendly,
+        tp.guided_tours,
+        tp.hours_of_operation as tourist_hours,
         h.star_rating, h.price_per_night,
         b.brewery_type,
         COALESCE(r.street, tp.street, h.street, b.street) as street,
@@ -695,13 +707,14 @@ def within_radius():
             features = []
             for r in rows:
                 # Generate a simple description if none exists
-                description = r[14] if len(r) > 14 and r[14] else None
+                # Note: description is at index 20, tourist_type is at index 21
+                description = r[20] if len(r) > 20 and r[20] else None
                 place_type = r[7] if len(r) > 7 else "unknown"
                 
                 if not description or (isinstance(description, str) and not description.strip()):
                     # Create a basic description based on place type
                     if place_type == 'brewery':
-                        brewery_type = r[17] if len(r) > 17 and r[17] else 'brewery'
+                        brewery_type = r[23] if len(r) > 23 and r[23] else 'brewery'
                         brewery_type_display = brewery_type.replace('_', ' ').title() if brewery_type else 'Brewery'
                         description = f"{brewery_type_display} located in {r[2]}, {r[3]}"
                     elif place_type == 'restaurant':
@@ -711,7 +724,7 @@ def within_radius():
                     elif place_type == 'tourist_place':
                         description = f"Tourist attraction in {r[2]}, {r[3]}"
                     elif place_type == 'hotel':
-                        stars = r[15] if len(r) > 15 and r[15] else None
+                        stars = r[21] if len(r) > 21 and r[21] else None
                         star_text = f"{stars}-star " if stars else ""
                         description = f"{star_text}Hotel in {r[2]}, {r[3]}"
                     else:
@@ -749,6 +762,14 @@ def within_radius():
                     hash_value = int(hashlib.md5(place_id_str.encode()).hexdigest()[:8], 16)
                     review_count = 50 + (hash_value % 1950)  # 50 to 2000
                 
+                # Extract restaurant-specific fields
+                hours_of_operation = r[13] if len(r) > 13 else None
+                dietary_options = r[14] if len(r) > 14 else None
+                outdoor_seating = r[15] if len(r) > 15 else None
+                delivery = r[16] if len(r) > 16 else None
+                takeout = r[17] if len(r) > 17 else None
+                reservations = r[18] if len(r) > 18 else None
+                
                 features.append({
                     "id": r[0],
                     "name": r[1],
@@ -764,13 +785,25 @@ def within_radius():
                     "website": r[10] if len(r) > 10 else None,
                     "cuisine_type": r[11] if len(r) > 11 else None,
                     "price_range": r[12] if len(r) > 12 else None,
-                    "entry_fee": float(r[13]) if len(r) > 13 and r[13] is not None else None,
-                    "description": description,
-                    "star_rating": r[15] if len(r) > 15 else None,
-                    "price_per_night": float(r[16]) if len(r) > 16 and r[16] is not None else None,
-                    "brewery_type": r[17] if len(r) > 17 else None,
-                    "street": r[18] if len(r) > 18 else None,
-                    "postal_code": r[19] if len(r) > 19 else None,
+                    "hours_of_operation": hours_of_operation,
+                    "dietary_options": dietary_options if isinstance(dietary_options, list) else (dietary_options if dietary_options else []),
+                    "outdoor_seating": outdoor_seating if outdoor_seating is not None else False,
+                    "delivery": delivery if delivery is not None else False,
+                    "takeout": takeout if takeout is not None else False,
+                    "reservations": reservations if reservations is not None else False,
+                    "entry_fee": float(r[19]) if len(r) > 19 and r[19] is not None else None,
+                    "tourist_type": r[21] if len(r) > 21 else None,
+                    "family_friendly": bool(r[22]) if len(r) > 22 and r[22] is not None else False,
+                    "accessibility": bool(r[23]) if len(r) > 23 and r[23] is not None else False,
+                    "pet_friendly": bool(r[24]) if len(r) > 24 and r[24] is not None else False,
+                    "guided_tours": bool(r[25]) if len(r) > 25 and r[25] is not None else False,
+                    "tourist_hours": r[26] if len(r) > 26 else None,
+                    "description": description,  # description is at index 20
+                    "star_rating": r[27] if len(r) > 27 else None,
+                    "price_per_night": float(r[28]) if len(r) > 28 and r[28] is not None else None,
+                    "brewery_type": r[29] if len(r) > 29 else None,
+                    "street": r[30] if len(r) > 30 else None,
+                    "postal_code": r[31] if len(r) > 31 else None,
                 })
             
             # Add list status if user is authenticated
@@ -1413,17 +1446,8 @@ def get_role_description(role_name):
 def add_place():
     """Add a new place to the database. Requires INSERT permission (admin_user or app_user)."""
     try:
-        # Debug: Log all headers to see what we're receiving
-        auth_header = request.headers.get('Authorization', 'NOT_FOUND')
-        x_token = request.headers.get('X-Auth-Token', 'NOT_FOUND')
-        app.logger.info(f"Add Place - Authorization: {auth_header[:50] if auth_header != 'NOT_FOUND' else 'NOT_FOUND'}")
-        app.logger.info(f"Add Place - X-Auth-Token: {x_token[:50] if x_token != 'NOT_FOUND' else 'NOT_FOUND'}")
-        app.logger.info(f"Add Place - All headers: {list(request.headers.keys())}")
-        
         # Check authentication using token or session
         role = get_user_role_from_request()
-        
-        app.logger.info(f"Add Place - Detected role: {role}")
         
         if not role:
             app.logger.warning(f"No authentication found for /places/add")
@@ -1595,146 +1619,127 @@ def add_place():
 @limiter.limit("5 per hour")  # Limit CSV uploads (heavy operation)
 def upload_csv():
     """Bulk upload places from CSV file. Admin only."""
-    # Debug: Log headers to see what we're receiving
-    auth_header = request.headers.get('Authorization', 'NOT_FOUND')
-    x_token = request.headers.get('X-Auth-Token', 'NOT_FOUND')
-    
-    # Log full tokens (for debugging)
-    if auth_header != 'NOT_FOUND':
-        token_from_auth = auth_header[7:].strip() if auth_header.startswith('Bearer ') else auth_header
-        app.logger.info(f"CSV Upload - Authorization token (full, length {len(token_from_auth)}): {token_from_auth}")
-    else:
-        app.logger.info(f"CSV Upload - Authorization: NOT_FOUND")
-    
-    if x_token != 'NOT_FOUND':
-        app.logger.info(f"CSV Upload - X-Auth-Token (full, length {len(x_token)}): {x_token}")
-    else:
-        app.logger.info(f"CSV Upload - X-Auth-Token: NOT_FOUND")
-    
-    # Get user role using unified authentication method
-    user_role = get_user_role_from_request()
-    
-    app.logger.info(f"CSV Upload - Detected role: {user_role}")
-    
-    # Fallback: Check FormData field (for file uploads)
-    if not user_role:
-        user_role_field = request.form.get('user_role')
-        if user_role_field and user_role_field in DB_ROLES:
-            user_role = user_role_field
-            app.logger.info(f"CSV Upload - Authenticated via FormData field: {user_role}")
-    
-    # If still no authentication found
-    if not user_role:
-        app.logger.warning(f"CSV Upload - No authentication found.")
-        return jsonify({
-            "error": "Not authenticated", 
-            "message": "Please login first, then try uploading."
-        }), 401
-    
-    # Only admin_user can bulk upload
-    if user_role != 'admin_user':
+    try:
+        # Get user role using unified authentication method
+        user_role = get_user_role_from_request()
+        
+        # Fallback: Check FormData field (for file uploads)
+        if not user_role:
+            user_role_field = request.form.get('user_role')
+            if user_role_field and user_role_field in DB_ROLES:
+                user_role = user_role_field
+        
+        # Check authentication
+        if not user_role:
+            return jsonify({
+                "error": "Not authenticated", 
+                "message": "Please login first, then try uploading."
+            }), 401
+        
+        # Only admin_user can bulk upload
+        if user_role != 'admin_user':
             return jsonify({
                 "error": "Permission denied",
                 "message": "Only admin_user can bulk upload CSV files.",
                 "required_role": "admin_user",
                 "current_role": user_role
             }), 403
-    
-    # Check if file is present
-    if 'file' not in request.files:
-        return jsonify({"error": "No file provided. Please upload a CSV file."}), 400
-    
-    file = request.files['file']
-    
-    if file.filename == '':
-        return jsonify({"error": "No file selected"}), 400
-    
-    if not file.filename.lower().endswith('.csv'):
-        return jsonify({"error": "File must be a CSV file"}), 400
-    
-    try:
-        # Read CSV file
-        stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
-        csv_reader = csv.DictReader(stream)
         
-        # Expected CSV columns
-        required_columns = ['name', 'lat', 'lon']
+        # Check if file is present
+        if 'file' not in request.files:
+            return jsonify({"error": "No file provided. Please upload a CSV file."}), 400
         
-        # Validate headers
-        if not csv_reader.fieldnames:
-            return jsonify({"error": "CSV file is empty or invalid"}), 400
+        file = request.files['file']
         
-        # Check required columns (case-insensitive)
-        headers_lower = [h.lower().strip() if h else '' for h in csv_reader.fieldnames]
-        missing = [col for col in required_columns if col.lower() not in headers_lower]
+        if file.filename == '':
+            return jsonify({"error": "No file selected"}), 400
         
-        if missing:
-            return jsonify({
-                "error": f"Missing required columns: {', '.join(missing)}",
-                "required": required_columns,
-                "found": list(csv_reader.fieldnames)
-            }), 400
+        if not file.filename.lower().endswith('.csv'):
+            return jsonify({"error": "File must be a CSV file"}), 400
         
-        # Process rows
-        inserted_count = 0
-        skipped_count = 0
-        errors = []
-        
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                for row_num, row in enumerate(csv_reader, start=2):  # Start at 2 (header is row 1)
-                    try:
-                        # Map CSV columns (case-insensitive)
-                        row_dict = {k.lower().strip() if k else '': v for k, v in row.items() if k}
-                        
-                        name = row_dict.get('name', '').strip()
-                        lat_str = row_dict.get('lat', '').strip()
-                        lon_str = row_dict.get('lon', '').strip()
-                        city = row_dict.get('city', '').strip()
-                        state = row_dict.get('state', '').strip()
-                        country = row_dict.get('country', 'US').strip() or 'US'
-                        source_id = row_dict.get('source_id', '').strip()
-                        place_type = row_dict.get('place_type', 'brewery').strip().lower()
-                        
-                        # Validate place_type
-                        valid_types = ['brewery', 'restaurant', 'tourist_place', 'hotel']
-                        if place_type not in valid_types:
-                            errors.append(f"Row {row_num}: Invalid place_type '{place_type}'. Must be one of: {', '.join(valid_types)}")
-                            skipped_count += 1
-                            continue
-                        
-                        # Validate required fields
-                        if not name:
-                            errors.append(f"Row {row_num}: Name is required")
-                            skipped_count += 1
-                            continue
-                        
-                        if not lat_str or not lon_str:
-                            errors.append(f"Row {row_num}: Latitude and longitude are required")
-                            skipped_count += 1
-                            continue
-                        
-                        # Parse coordinates
+        try:
+            # Read CSV file
+            stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
+            csv_reader = csv.DictReader(stream)
+            
+            # Expected CSV columns
+            required_columns = ['name', 'lat', 'lon']
+            
+            # Validate headers
+            if not csv_reader.fieldnames:
+                return jsonify({"error": "CSV file is empty or invalid"}), 400
+            
+            # Check required columns (case-insensitive)
+            headers_lower = [h.lower().strip() if h else '' for h in csv_reader.fieldnames]
+            missing = [col for col in required_columns if col.lower() not in headers_lower]
+            
+            if missing:
+                return jsonify({
+                    "error": f"Missing required columns: {', '.join(missing)}",
+                    "required": required_columns,
+                    "found": list(csv_reader.fieldnames)
+                }), 400
+            
+            # Process rows
+            inserted_count = 0
+            skipped_count = 0
+            errors = []
+            
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    for row_num, row in enumerate(csv_reader, start=2):  # Start at 2 (header is row 1)
                         try:
-                            lat = float(lat_str)
-                            lon = float(lon_str)
-                            validate_coordinates(lat, lon)
-                        except (ValueError, TypeError) as e:
-                            errors.append(f"Row {row_num}: Invalid coordinates - {str(e)}")
-                            skipped_count += 1
-                            continue
-                        
-                        # Generate source_id if not provided
-                        if not source_id:
-                            source_id = f"csv_{uuid.uuid4().hex[:12]}"
-                        
-                        # Insert into database
-                        try:
-                            # Get user_id for created_by tracking (admin who uploaded CSV)
-                            user_id = get_user_id_from_request()
+                            # Map CSV columns (case-insensitive)
+                            row_dict = {k.lower().strip() if k else '': v for k, v in row.items() if k}
                             
-                            # Insert into places table (with created_by tracking)
-                            cur.execute("""
+                            name = row_dict.get('name', '').strip()
+                            lat_str = row_dict.get('lat', '').strip()
+                            lon_str = row_dict.get('lon', '').strip()
+                            city = row_dict.get('city', '').strip()
+                            state = row_dict.get('state', '').strip()
+                            country = row_dict.get('country', 'US').strip() or 'US'
+                            source_id = row_dict.get('source_id', '').strip()
+                            place_type = row_dict.get('place_type', 'brewery').strip().lower()
+                            
+                            # Validate place_type
+                            valid_types = ['brewery', 'restaurant', 'tourist_place', 'hotel']
+                            if place_type not in valid_types:
+                                errors.append(f"Row {row_num}: Invalid place_type '{place_type}'. Must be one of: {', '.join(valid_types)}")
+                                skipped_count += 1
+                                continue
+                            
+                            # Validate required fields
+                            if not name:
+                                errors.append(f"Row {row_num}: Name is required")
+                                skipped_count += 1
+                                continue
+                            
+                            if not lat_str or not lon_str:
+                                errors.append(f"Row {row_num}: Latitude and longitude are required")
+                                skipped_count += 1
+                                continue
+                            
+                            # Parse coordinates
+                            try:
+                                lat = float(lat_str)
+                                lon = float(lon_str)
+                                validate_coordinates(lat, lon)
+                            except (ValueError, TypeError) as e:
+                                errors.append(f"Row {row_num}: Invalid coordinates - {str(e)}")
+                                skipped_count += 1
+                                continue
+                            
+                            # Generate source_id if not provided
+                            if not source_id:
+                                source_id = f"csv_{uuid.uuid4().hex[:12]}"
+                            
+                            # Insert into database
+                            try:
+                                # Get user_id for created_by tracking (admin who uploaded CSV)
+                                user_id = get_user_id_from_request()
+                                
+                                # Insert into places table (with created_by tracking)
+                                cur.execute("""
                                 INSERT INTO places (source_id, name, city, state, country, lat, lon, geom, created_by)
                                 SELECT %s, %s, %s, %s, %s, %s, %s,
                                        ST_SetSRID(ST_MakePoint(%s, %s), 4326), %s
@@ -1742,113 +1747,118 @@ def upload_csv():
                                     SELECT 1 FROM places WHERE source_id = %s
                                 )
                                 RETURNING id;
-                            """, (source_id, name, city, state, country, lat, lon, lon, lat, user_id, source_id))
+                                """, (source_id, name, city, state, country, lat, lon, lon, lat, user_id, source_id))
+                                
+                                result = cur.fetchone()
+                                if result:
+                                    place_id = result[0]
+                                    
+                                    # Insert into type-specific table
+                                    if place_type == 'brewery':
+                                        brewery_type = row_dict.get('brewery_type', 'micro').strip() or 'micro'
+                                        cur.execute("""
+                                            INSERT INTO breweries (place_id, brewery_type, website, phone, street, postal_code)
+                                            VALUES (%s, %s, %s, %s, %s, %s)
+                                            ON CONFLICT (place_id) DO NOTHING
+                                        """, (
+                                            place_id,
+                                            brewery_type,
+                                            row_dict.get('website', '').strip() or None,
+                                            row_dict.get('phone', '').strip() or None,
+                                            row_dict.get('street', '').strip() or None,
+                                            row_dict.get('postal_code', '').strip() or None
+                                        ))
+                                    elif place_type == 'restaurant':
+                                        cur.execute("""
+                                            INSERT INTO restaurants (place_id, cuisine_type, price_range, rating, website, phone, street, postal_code, hours_of_operation)
+                                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                            ON CONFLICT (place_id) DO NOTHING
+                                        """, (
+                                            place_id,
+                                            row_dict.get('cuisine_type', '').strip() or None,
+                                            int(row_dict.get('price_range', 0)) if row_dict.get('price_range', '').strip() else None,
+                                            float(row_dict.get('rating', 0)) if row_dict.get('rating', '').strip() else None,
+                                            row_dict.get('website', '').strip() or None,
+                                            row_dict.get('phone', '').strip() or None,
+                                            row_dict.get('street', '').strip() or None,
+                                            row_dict.get('postal_code', '').strip() or None,
+                                            row_dict.get('hours_of_operation', '').strip() or None
+                                        ))
+                                    elif place_type == 'tourist_place':
+                                        cur.execute("""
+                                            INSERT INTO tourist_places (place_id, place_type, rating, entry_fee, website, phone, street, postal_code, description)
+                                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                            ON CONFLICT (place_id) DO NOTHING
+                                        """, (
+                                            place_id,
+                                            row_dict.get('tourist_type', '').strip() or None,
+                                            float(row_dict.get('rating', 0)) if row_dict.get('rating', '').strip() else None,
+                                            float(row_dict.get('entry_fee', 0)) if row_dict.get('entry_fee', '').strip() else None,
+                                            row_dict.get('website', '').strip() or None,
+                                            row_dict.get('phone', '').strip() or None,
+                                            row_dict.get('street', '').strip() or None,
+                                            row_dict.get('postal_code', '').strip() or None,
+                                            row_dict.get('description', '').strip() or None
+                                        ))
+                                    elif place_type == 'hotel':
+                                        amenities_str = row_dict.get('amenities', '').strip()
+                                        amenities = [a.strip() for a in amenities_str.split(',')] if amenities_str else []
+                                        cur.execute("""
+                                            INSERT INTO hotels (place_id, star_rating, rating, price_per_night, amenities, website, phone, street, postal_code, check_in_time, check_out_time)
+                                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                            ON CONFLICT (place_id) DO NOTHING
+                                        """, (
+                                            place_id,
+                                            int(row_dict.get('star_rating', 0)) if row_dict.get('star_rating', '').strip() else None,
+                                            float(row_dict.get('rating', 0)) if row_dict.get('rating', '').strip() else None,
+                                            float(row_dict.get('price_per_night', 0)) if row_dict.get('price_per_night', '').strip() else None,
+                                            amenities if amenities else None,
+                                            row_dict.get('website', '').strip() or None,
+                                            row_dict.get('phone', '').strip() or None,
+                                            row_dict.get('street', '').strip() or None,
+                                            row_dict.get('postal_code', '').strip() or None,
+                                            row_dict.get('check_in_time', '').strip() or None,
+                                            row_dict.get('check_out_time', '').strip() or None
+                                        ))
+                                    
+                                    inserted_count += 1
+                                else:
+                                    skipped_count += 1
+                                    errors.append(f"Row {row_num}: Duplicate source_id '{source_id}' - skipped")
                             
-                            result = cur.fetchone()
-                            if result:
-                                place_id = result[0]
-                                
-                                # Insert into type-specific table
-                                if place_type == 'brewery':
-                                    brewery_type = row_dict.get('brewery_type', 'micro').strip() or 'micro'
-                                    cur.execute("""
-                                        INSERT INTO breweries (place_id, brewery_type, website, phone, street, postal_code)
-                                        VALUES (%s, %s, %s, %s, %s, %s)
-                                        ON CONFLICT (place_id) DO NOTHING
-                                    """, (
-                                        place_id,
-                                        brewery_type,
-                                        row_dict.get('website', '').strip() or None,
-                                        row_dict.get('phone', '').strip() or None,
-                                        row_dict.get('street', '').strip() or None,
-                                        row_dict.get('postal_code', '').strip() or None
-                                    ))
-                                elif place_type == 'restaurant':
-                                    cur.execute("""
-                                        INSERT INTO restaurants (place_id, cuisine_type, price_range, rating, website, phone, street, postal_code, hours_of_operation)
-                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                        ON CONFLICT (place_id) DO NOTHING
-                                    """, (
-                                        place_id,
-                                        row_dict.get('cuisine_type', '').strip() or None,
-                                        int(row_dict.get('price_range', 0)) if row_dict.get('price_range', '').strip() else None,
-                                        float(row_dict.get('rating', 0)) if row_dict.get('rating', '').strip() else None,
-                                        row_dict.get('website', '').strip() or None,
-                                        row_dict.get('phone', '').strip() or None,
-                                        row_dict.get('street', '').strip() or None,
-                                        row_dict.get('postal_code', '').strip() or None,
-                                        row_dict.get('hours_of_operation', '').strip() or None
-                                    ))
-                                elif place_type == 'tourist_place':
-                                    cur.execute("""
-                                        INSERT INTO tourist_places (place_id, place_type, rating, entry_fee, website, phone, street, postal_code, description)
-                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                        ON CONFLICT (place_id) DO NOTHING
-                                    """, (
-                                        place_id,
-                                        row_dict.get('tourist_type', '').strip() or None,
-                                        float(row_dict.get('rating', 0)) if row_dict.get('rating', '').strip() else None,
-                                        float(row_dict.get('entry_fee', 0)) if row_dict.get('entry_fee', '').strip() else None,
-                                        row_dict.get('website', '').strip() or None,
-                                        row_dict.get('phone', '').strip() or None,
-                                        row_dict.get('street', '').strip() or None,
-                                        row_dict.get('postal_code', '').strip() or None,
-                                        row_dict.get('description', '').strip() or None
-                                    ))
-                                elif place_type == 'hotel':
-                                    amenities_str = row_dict.get('amenities', '').strip()
-                                    amenities = [a.strip() for a in amenities_str.split(',')] if amenities_str else []
-                                    cur.execute("""
-                                        INSERT INTO hotels (place_id, star_rating, rating, price_per_night, amenities, website, phone, street, postal_code, check_in_time, check_out_time)
-                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                        ON CONFLICT (place_id) DO NOTHING
-                                    """, (
-                                        place_id,
-                                        int(row_dict.get('star_rating', 0)) if row_dict.get('star_rating', '').strip() else None,
-                                        float(row_dict.get('rating', 0)) if row_dict.get('rating', '').strip() else None,
-                                        float(row_dict.get('price_per_night', 0)) if row_dict.get('price_per_night', '').strip() else None,
-                                        amenities if amenities else None,
-                                        row_dict.get('website', '').strip() or None,
-                                        row_dict.get('phone', '').strip() or None,
-                                        row_dict.get('street', '').strip() or None,
-                                        row_dict.get('postal_code', '').strip() or None,
-                                        row_dict.get('check_in_time', '').strip() or None,
-                                        row_dict.get('check_out_time', '').strip() or None
-                                    ))
-                                
-                                inserted_count += 1
-                            else:
-                                skipped_count += 1
-                                errors.append(f"Row {row_num}: Duplicate source_id '{source_id}' - skipped")
+                            except psycopg.Error as e:
+                                    errors.append(f"Row {row_num}: Database error - {str(e)}")
+                                    skipped_count += 1
+                                    continue
                         
-                        except psycopg.Error as e:
-                            errors.append(f"Row {row_num}: Database error - {str(e)}")
+                        except Exception as e:
+                            errors.append(f"Row {row_num}: Unexpected error - {str(e)}")
                             skipped_count += 1
                             continue
                     
-                    except Exception as e:
-                        errors.append(f"Row {row_num}: Unexpected error - {str(e)}")
-                        skipped_count += 1
-                        continue
-                
-                conn.commit()
-        
-        return jsonify({
-            "success": True,
-            "message": f"CSV upload completed",
-            "summary": {
-                "inserted": inserted_count,
-                "skipped": skipped_count,
-                "total_rows": inserted_count + skipped_count
-            },
-            "errors": errors[:20],  # Limit to first 20 errors
-            "error_count": len(errors)
-        }), 200
-        
+                    conn.commit()
+            
+            return jsonify({
+                "success": True,
+                "message": f"CSV upload completed",
+                "summary": {
+                    "inserted": inserted_count,
+                    "skipped": skipped_count,
+                    "total_rows": inserted_count + skipped_count
+                },
+                "errors": errors[:20],  # Limit to first 20 errors
+                "error_count": len(errors)
+            }), 200
+        except Exception as e:
+            app.logger.error(f"Error in CSV upload: {e}")
+            return jsonify({
+                "error": "Failed to process CSV file",
+                "details": str(e)
+            }), 500
     except Exception as e:
-        app.logger.error(f"Error in CSV upload: {e}")
+        app.logger.error(f"Error in upload_csv endpoint: {e}")
         return jsonify({
-            "error": "Failed to process CSV file",
+            "error": "Failed to process request",
             "details": str(e)
         }), 500
 
@@ -2890,7 +2900,6 @@ def get_group_places(group_id):
             places_data = cur.fetchall()
             app.logger.info(f"Found {len(places_data)} places in group {group_id} from member lists")
             
-            # Debug: Check individual member lists
             for member_id, member_username in group_members_list:
                 cur.execute("""
                     SELECT COUNT(*) FROM user_visited_places WHERE user_id = %s

@@ -21,6 +21,14 @@ async function fetchAPI(endpoint, options = {}) {
   });
 
   if (!response.ok) {
+    // Handle 401 errors - they're expected when not authenticated
+    if (response.status === 401) {
+      const error = await response.json().catch(() => ({ error: 'Unauthorized' }));
+      const authError = new Error(error.error || 'Unauthorized');
+      authError.status = 401;
+      authError.isAuthError = true;
+      throw authError;
+    }
     const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
     throw new Error(error.error || `HTTP ${response.status}`);
   }
@@ -60,6 +68,11 @@ export async function loginUser(userData) {
 }
 
 export async function getUserProfile() {
+  // Only make the request if we have a token to avoid unnecessary 401 errors
+  const token = getAuthToken();
+  if (!token) {
+    throw new Error('Not authenticated');
+  }
   return fetchAPI('/api/users/profile');
 }
 

@@ -47,3 +47,4 @@ ORDER BY COUNT(*) DESC;
 
 You should see restaurants in Dallas, Austin, San Antonio, Fort Worth, and El Paso in addition to Houston.
 
+

@@ -1,5 +1,6 @@
 import React from 'react';
 import PlaceListIcons from './PlaceListIcons';
+import MultiSelectDropdown from './MultiSelectDropdown';
 
 function ResultsSidebar({
   results,
@@ -16,6 +17,31 @@ function ResultsSidebar({
   listSearchQuery = '',
   onListSearchChange = null,
   onClose = null,
+  filters = { placeTypes: [], minRating: 0, maxDistance: null, states: [] },
+  onFiltersChange = null,
+  allResults = [],
+              restaurantFilters = { 
+    cuisines: [], 
+    priceRanges: [], 
+    ratings: [],
+    dietaryOptions: [],
+    openNow: false,
+    delivery: false,
+    takeout: false,
+    reservations: false
+  },
+  onRestaurantFiltersChange = null,
+  touristFilters = {
+    categories: [],
+    entryFee: [],
+    ratings: [],
+    familyFriendly: false,
+    accessibility: false,
+    petFriendly: false,
+    openNow: false,
+    guidedTours: false
+  },
+  onTouristFiltersChange = null,
 }) {
 
   // Ensure results is always an array
@@ -61,19 +87,44 @@ function ResultsSidebar({
     <div className="results-sidebar">
       {/* Header with Tabs */}
       <div className="sidebar-header" style={{ position: 'relative' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
         <h3 style={{
-          margin: '0 0 16px 0',
+            margin: '0',
           fontSize: '1.5rem',
           fontWeight: '800',
-          color: '#000000',
+            color: '#1f2937',
           letterSpacing: '-0.5px',
           display: 'flex',
           alignItems: 'center',
           gap: '10px'
         }}>
           <span style={{ fontSize: '1.75rem' }}>{getHeadingIcon()}</span>
-          <span style={{ color: '#000000' }}>{getHeading()}</span>
+            <span style={{ color: '#1f2937' }}>{getHeading()}</span>
         </h3>
+          
+          {/* Results Count Badge - Small rounded badge in top-right */}
+          {safeResults.length > 0 && (
+            <div style={{
+              padding: '6px 12px',
+              background: 'rgba(16, 185, 129, 0.15)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              borderRadius: '20px',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+              fontSize: '0.75rem',
+              fontWeight: '700',
+              color: '#1f2937',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.15)',
+              whiteSpace: 'nowrap'
+            }}>
+              <span style={{ fontSize: '0.875rem' }}>✅</span>
+              <span>{safeResults.length}</span>
+            </div>
+          )}
+        </div>
         
         {/* Close Button */}
         {onClose && (
@@ -83,28 +134,35 @@ function ResultsSidebar({
               position: 'absolute',
               top: '0',
               right: '0',
-              width: '32px',
-              height: '32px',
-              background: 'transparent',
-              border: 'none',
-              borderRadius: '8px',
+              width: '36px',
+              height: '36px',
+              background: 'rgba(255, 255, 255, 0.5)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              border: '1px solid rgba(255, 255, 255, 0.4)',
+              borderRadius: '10px',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               padding: '0',
               transition: 'all 0.2s ease',
-              color: '#64748b'
+              color: '#64748b',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#fee2e2';
+              e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
               e.currentTarget.style.color = '#dc2626';
+              e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.4)';
               e.currentTarget.style.transform = 'rotate(90deg) scale(1.1)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.5)';
               e.currentTarget.style.color = '#64748b';
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.4)';
               e.currentTarget.style.transform = 'rotate(0deg) scale(1)';
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08)';
             }}
             title="Close results"
             aria-label="Close results"
@@ -133,16 +191,19 @@ function ResultsSidebar({
       {error && (
         <div style={{
           padding: '12px 16px',
-          background: 'var(--error-light)',
-          border: '2px solid var(--error)',
+          background: 'rgba(239, 68, 68, 0.2)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          border: '1px solid rgba(239, 68, 68, 0.4)',
           borderRadius: '12px',
-          color: 'var(--error-dark)',
+          color: '#1f2937',
           fontSize: '0.875rem',
-          fontWeight: '600',
+          fontWeight: '700',
           marginBottom: '16px',
           display: 'flex',
           alignItems: 'center',
-          gap: '8px'
+          gap: '8px',
+          boxShadow: '0 2px 8px rgba(239, 68, 68, 0.15)'
         }}>
           <span>❌</span>
           <span>{error}</span>
@@ -158,10 +219,13 @@ function ResultsSidebar({
             display: 'flex', 
             alignItems: 'center', 
                 gap: '10px',
-                background: 'var(--gray-50)',
+                background: 'rgba(255, 255, 255, 0.5)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
                 padding: '12px',
                 borderRadius: '12px',
-                border: '2px solid var(--border-light)'
+                border: '1px solid rgba(255, 255, 255, 0.4)',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
               }}>
                 <span style={{ fontSize: '1.125rem' }}>🔍</span>
             <input
@@ -173,18 +237,23 @@ function ResultsSidebar({
                 flex: 1,
                     padding: '10px 12px',
                     fontSize: '0.875rem',
-                    border: '2px solid var(--border-light)',
+                    border: '1px solid rgba(99, 102, 241, 0.2)',
                     borderRadius: '8px',
                     outline: 'none',
-                    background: 'white',
-                    transition: 'all 0.2s'
+                    background: 'rgba(255, 255, 255, 0.7)',
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
+                    transition: 'all 0.2s ease',
+                    color: '#1f2937'
                   }}
                   onFocus={(e) => {
-                    e.target.style.borderColor = 'var(--primary-500)';
-                    e.target.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.1)';
+                    e.target.style.borderColor = 'rgba(99, 102, 241, 0.5)';
+                    e.target.style.background = 'rgba(255, 255, 255, 0.9)';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.1), 0 4px 12px rgba(99, 102, 241, 0.15)';
                   }}
                   onBlur={(e) => {
-                    e.target.style.borderColor = 'var(--border-light)';
+                    e.target.style.borderColor = 'rgba(99, 102, 241, 0.2)';
+                    e.target.style.background = 'rgba(255, 255, 255, 0.7)';
                     e.target.style.boxShadow = 'none';
                   }}
             />
@@ -194,22 +263,27 @@ function ResultsSidebar({
                 onClick={() => onListSearchChange('')}
                 style={{
                   padding: '6px 10px',
-                      background: 'var(--error)',
+                    background: 'rgba(239, 68, 68, 0.8)',
+                    backdropFilter: 'blur(4px)',
+                    WebkitBackdropFilter: 'blur(4px)',
                   color: 'white',
-                  border: 'none',
+                  border: '1px solid rgba(239, 68, 68, 0.5)',
                       borderRadius: '6px',
                   cursor: 'pointer',
                       fontSize: '0.75rem',
                       fontWeight: '700',
-                      transition: 'all 0.2s'
+                      transition: 'all 0.2s ease',
+                      boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)'
                     }}
                     onMouseEnter={(e) => {
-                      e.target.style.background = 'var(--error-dark)';
+                      e.target.style.background = 'rgba(220, 38, 38, 0.9)';
                       e.target.style.transform = 'scale(1.1)';
+                      e.target.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.4)';
                     }}
                     onMouseLeave={(e) => {
-                      e.target.style.background = 'var(--error)';
+                      e.target.style.background = 'rgba(239, 68, 68, 0.8)';
                       e.target.style.transform = 'scale(1)';
+                      e.target.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.3)';
                 }}
                 title="Clear search"
               >
@@ -234,43 +308,261 @@ function ResultsSidebar({
         </div>
       )}
 
-          {/* Query Info */}
-          {queryInfo && (
+          {/* Restaurant-Specific Filters - Show only when there are restaurant results */}
+          {!activeListView && hasResults && onRestaurantFiltersChange && allResults.length > 0 && 
+           allResults.some(r => r.place_type === 'restaurant') && (
             <div style={{
-              padding: '10px 14px',
-              background: 'linear-gradient(135deg, var(--primary-50), var(--primary-100))',
-              borderRadius: '10px',
               marginBottom: '16px',
-              border: '1px solid var(--primary-200)',
-              fontSize: '0.8125rem',
-              color: 'var(--primary-700)',
-              fontWeight: '600'
+              padding: '16px',
+              background: 'rgba(255, 255, 255, 0.5)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              borderRadius: '12px',
+              border: '1px solid rgba(255, 255, 255, 0.4)',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+              position: 'relative',
+              zIndex: 999
             }}>
-              <span style={{ marginRight: '8px' }}>🔍</span>
-              {queryInfo}
+              <h4 style={{
+                margin: '0 0 16px 0',
+                fontSize: '0.875rem',
+                fontWeight: '700',
+                color: '#1f2937',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                <span>🍽️</span>
+                <span>Restaurant Filters</span>
+              </h4>
+              
+              {/* 9 Filters in 3 rows of 3 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {/* Row 1 */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                  <MultiSelectDropdown
+                    placeholder="Cuisine Type"
+                    options={[
+                      { value: 'Italian', label: 'Italian' },
+                      { value: 'Mexican', label: 'Mexican' },
+                      { value: 'Chinese', label: 'Chinese' },
+                      { value: 'Indian', label: 'Indian' },
+                      { value: 'Japanese', label: 'Japanese' },
+                      { value: 'Thai', label: 'Thai' },
+                      { value: 'American', label: 'American' },
+                      { value: 'Mediterranean', label: 'Mediterranean' },
+                      { value: 'French', label: 'French' },
+                      { value: 'Greek', label: 'Greek' },
+                      { value: 'Korean', label: 'Korean' },
+                      { value: 'Vietnamese', label: 'Vietnamese' },
+                      { value: 'Seafood', label: 'Seafood' },
+                      { value: 'Steakhouse', label: 'Steakhouse' },
+                      { value: 'Pizza', label: 'Pizza' },
+                      { value: 'BBQ', label: 'BBQ' }
+                    ]}
+                    selectedValues={restaurantFilters.cuisines}
+                    onChange={(selected) => onRestaurantFiltersChange({ ...restaurantFilters, cuisines: selected })}
+                  />
+                  
+                  <MultiSelectDropdown
+                    placeholder="Price Range"
+                    options={[
+                      { value: '1', label: '$ Budget' },
+                      { value: '2', label: '$$ Moderate' },
+                      { value: '3', label: '$$$ Expensive' },
+                      { value: '4', label: '$$$$ Very Expensive' }
+                    ]}
+                    selectedValues={restaurantFilters.priceRanges}
+                    onChange={(selected) => onRestaurantFiltersChange({ ...restaurantFilters, priceRanges: selected })}
+                  />
+                  
+                  <MultiSelectDropdown
+                    placeholder="Rating"
+                    options={[
+                      { value: '4', label: '4+ Stars' },
+                      { value: '4.5', label: '4.5+ Stars' },
+                      { value: '5', label: '5 Stars' }
+                    ]}
+                    selectedValues={restaurantFilters.ratings}
+                    onChange={(selected) => onRestaurantFiltersChange({ ...restaurantFilters, ratings: selected })}
+                  />
+                </div>
+                
+                {/* Row 2 - Dietary, Open Now */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+                  <MultiSelectDropdown
+                    placeholder="Dietary Options"
+                    options={[
+                      { value: 'vegetarian', label: 'Vegetarian' },
+                      { value: 'vegan', label: 'Vegan' },
+                      { value: 'gluten-free', label: 'Gluten-Free' },
+                      { value: 'halal', label: 'Halal' },
+                      { value: 'kosher', label: 'Kosher' },
+                      { value: 'keto-friendly', label: 'Keto-Friendly' }
+                    ]}
+                    selectedValues={restaurantFilters.dietaryOptions || []}
+                    onChange={(selected) => onRestaurantFiltersChange({ ...restaurantFilters, dietaryOptions: selected })}
+                  />
+                  
+                  <MultiSelectDropdown
+                    placeholder="Open Now"
+                    options={[
+                      { value: 'yes', label: 'Open Now' }
+                    ]}
+                    selectedValues={restaurantFilters.openNow ? ['yes'] : []}
+                    onChange={(selected) => onRestaurantFiltersChange({ ...restaurantFilters, openNow: selected.includes('yes') })}
+                  />
+                </div>
+                
+                {/* Row 3 */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                  <MultiSelectDropdown
+                    placeholder="Delivery"
+                    options={[
+                      { value: 'yes', label: 'Delivery Available' }
+                    ]}
+                    selectedValues={restaurantFilters.delivery ? ['yes'] : []}
+                    onChange={(selected) => onRestaurantFiltersChange({ ...restaurantFilters, delivery: selected.includes('yes') })}
+                  />
+                  
+                  <MultiSelectDropdown
+                    placeholder="Takeout"
+                    options={[
+                      { value: 'yes', label: 'Takeout Available' }
+                    ]}
+                    selectedValues={restaurantFilters.takeout ? ['yes'] : []}
+                    onChange={(selected) => onRestaurantFiltersChange({ ...restaurantFilters, takeout: selected.includes('yes') })}
+                  />
+                  
+                  <MultiSelectDropdown
+                    placeholder="Reservations"
+                    options={[
+                      { value: 'yes', label: 'Accepts Reservations' }
+                    ]}
+                    selectedValues={restaurantFilters.reservations ? ['yes'] : []}
+                    onChange={(selected) => onRestaurantFiltersChange({ ...restaurantFilters, reservations: selected.includes('yes') })}
+                  />
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Results Count */}
-          {safeResults.length > 0 && (
+          {/* Tourist Place-Specific Filters - Show only when there are tourist place results */}
+          {!activeListView && hasResults && onTouristFiltersChange && allResults.length > 0 && 
+           allResults.some(r => r.place_type === 'tourist_place') && (
             <div style={{
-              marginBottom: '12px',
-              padding: '12px 16px',
-              background: 'linear-gradient(135deg, #d1fae5, #a7f3d0)',
+              marginBottom: '16px',
+              padding: '16px',
+              background: 'rgba(255, 255, 255, 0.5)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
               borderRadius: '12px',
-              border: '2px solid #10b981',
-              fontSize: '0.9375rem',
-              fontWeight: '800',
-              color: '#065f46',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.2)'
+              border: '1px solid rgba(255, 255, 255, 0.4)',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+              position: 'relative',
+              zIndex: 999
             }}>
-              <span style={{ fontSize: '1.25rem' }}>✅</span>
-              <span>Found {safeResults.length} result{safeResults.length !== 1 ? 's' : ''}</span>
+              <h4 style={{
+                margin: '0 0 16px 0',
+                fontSize: '0.875rem',
+                fontWeight: '700',
+                color: '#1f2937',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                <span>🗺️</span>
+                <span>Tourist Place Filters</span>
+              </h4>
+              
+              {/* 8 Filters in 3 rows: 3-3-2 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {/* Row 1 */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                  <MultiSelectDropdown
+                    placeholder="Category"
+                    options={[
+                      { value: 'Park', label: 'Park' },
+                      { value: 'Museum', label: 'Museum' },
+                      { value: 'Monument', label: 'Monument' },
+                      { value: 'Attraction', label: 'Attraction' },
+                      { value: 'Beach', label: 'Beach' },
+                      { value: 'Landmark', label: 'Landmark' }
+                    ]}
+                    selectedValues={touristFilters.categories}
+                    onChange={(selected) => onTouristFiltersChange({ ...touristFilters, categories: selected })}
+                  />
+                  
+                  <MultiSelectDropdown
+                    placeholder="Entry Fee"
+                    options={[
+                      { value: 'free', label: 'Free' },
+                      { value: '1-10', label: '$1-$10' },
+                      { value: '11-25', label: '$11-$25' },
+                      { value: '25+', label: '$25+' }
+                    ]}
+                    selectedValues={touristFilters.entryFee}
+                    onChange={(selected) => onTouristFiltersChange({ ...touristFilters, entryFee: selected })}
+                  />
+                  
+                  <MultiSelectDropdown
+                    placeholder="Rating"
+                    options={[
+                      { value: '4', label: '4+ Stars' },
+                      { value: '4.5', label: '4.5+ Stars' },
+                      { value: '5', label: '5 Stars' }
+                    ]}
+                    selectedValues={touristFilters.ratings}
+                    onChange={(selected) => onTouristFiltersChange({ ...touristFilters, ratings: selected })}
+                  />
+                </div>
+                
+                {/* Row 2 */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                  <MultiSelectDropdown
+                    placeholder="Family Friendly"
+                    options={[{ value: 'yes', label: 'Family Friendly' }]}
+                    selectedValues={touristFilters.familyFriendly ? ['yes'] : []}
+                    onChange={(selected) => onTouristFiltersChange({ ...touristFilters, familyFriendly: selected.includes('yes') })}
+                  />
+                  
+                  <MultiSelectDropdown
+                    placeholder="Accessibility"
+                    options={[{ value: 'yes', label: 'Wheelchair Accessible' }]}
+                    selectedValues={touristFilters.accessibility ? ['yes'] : []}
+                    onChange={(selected) => onTouristFiltersChange({ ...touristFilters, accessibility: selected.includes('yes') })}
+                  />
+                  
+                  <MultiSelectDropdown
+                    placeholder="Pet Friendly"
+                    options={[{ value: 'yes', label: 'Pet Friendly' }]}
+                    selectedValues={touristFilters.petFriendly ? ['yes'] : []}
+                    onChange={(selected) => onTouristFiltersChange({ ...touristFilters, petFriendly: selected.includes('yes') })}
+                  />
+                </div>
+                
+                {/* Row 3 */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+                  <MultiSelectDropdown
+                    placeholder="Open Now"
+                    options={[{ value: 'yes', label: 'Open Now' }]}
+                    selectedValues={touristFilters.openNow ? ['yes'] : []}
+                    onChange={(selected) => onTouristFiltersChange({ ...touristFilters, openNow: selected.includes('yes') })}
+                  />
+                  
+                  <MultiSelectDropdown
+                    placeholder="Guided Tours"
+                    options={[{ value: 'yes', label: 'Guided Tours Available' }]}
+                    selectedValues={touristFilters.guidedTours ? ['yes'] : []}
+                    onChange={(selected) => onTouristFiltersChange({ ...touristFilters, guidedTours: selected.includes('yes') })}
+                  />
+                </div>
+              </div>
             </div>
           )}
+
+          {/* Query Info - Hidden per user request */}
+
 
           {/* Results List */}
           <div className="results-list">
@@ -278,9 +570,12 @@ function ResultsSidebar({
               <div style={{
                 padding: '50px 20px',
                 textAlign: 'center',
-                background: 'linear-gradient(135deg, #f9fafb, #f3f4f6)',
+                background: 'rgba(255, 255, 255, 0.5)',
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
                 borderRadius: '16px',
-                border: '2px solid #e5e7eb'
+                border: '1px solid rgba(255, 255, 255, 0.4)',
+                boxShadow: '0 4px 16px rgba(31, 38, 135, 0.1)'
               }}>
                 <div style={{ fontSize: '4rem', marginBottom: '16px', opacity: 0.7 }}>🔍</div>
                 <div style={{ 
@@ -328,28 +623,35 @@ function ResultsSidebar({
                   onMarkerClick(place);
                 }}
                 style={{
-                    padding: '12px 14px',
-                    background: 'linear-gradient(135deg, #ffffff, #f8fafc)',
-                    borderRadius: '12px',
-                    border: '1px solid #e2e8f0',
-                    marginBottom: '10px',
+                    padding: '16px',
+                    /* Glassmorphism Effect */
+                    background: 'rgba(255, 255, 255, 0.7)',
+                    backdropFilter: 'blur(10px)',
+                    WebkitBackdropFilter: 'blur(10px)',
+                    borderRadius: '16px',
+                    border: '1px solid rgba(255, 255, 255, 0.4)',
+                    marginBottom: '12px',
                     cursor: 'pointer',
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.05)',
+                    boxShadow: '0 4px 16px rgba(31, 38, 135, 0.1)',
                     position: 'relative',
                     overflow: 'hidden'
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-6px) scale(1.01)';
-                    e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.1)';
-                    e.currentTarget.style.borderColor = typeColor.bg;
-                    e.currentTarget.style.background = 'linear-gradient(135deg, #ffffff, #f1f5f9)';
+                    e.currentTarget.style.transform = 'translateY(-4px) scale(1.02)';
+                    e.currentTarget.style.boxShadow = '0 12px 32px rgba(31, 38, 135, 0.2)';
+                    const rgb = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(typeColor.bg);
+                    if (rgb) {
+                      const borderColor = `rgba(${parseInt(rgb[1], 16)}, ${parseInt(rgb[2], 16)}, ${parseInt(rgb[3], 16)}, 0.5)`;
+                      e.currentTarget.style.borderColor = borderColor;
+                    }
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.85)';
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.05)';
-                    e.currentTarget.style.borderColor = '#e2e8f0';
-                    e.currentTarget.style.background = 'linear-gradient(135deg, #ffffff, #f8fafc)';
+                    e.currentTarget.style.boxShadow = '0 4px 16px rgba(31, 38, 135, 0.1)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.4)';
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.7)';
                   }}
                 >
                   {/* Row 1: Name, Rating */}
@@ -364,11 +666,11 @@ function ResultsSidebar({
                     {/* Place Name */}
                     <h4 style={{
                       margin: '0',
-                      fontSize: '1rem',
+                      fontSize: '1.125rem',
                       fontWeight: '900',
-                      color: '#000000',
+                      color: '#1f2937',
                       lineHeight: '1.3',
-                      letterSpacing: '-0.2px',
+                      letterSpacing: '-0.3px',
                       flex: '1',
                       minWidth: '120px'
                     }}>
@@ -394,24 +696,27 @@ function ResultsSidebar({
                             display: 'flex',
                             alignItems: 'center',
                             gap: '4px',
-                            background: 'linear-gradient(135deg, #fef3c7, #fde68a)',
-                            padding: '3px 8px',
-                            borderRadius: '6px',
-                            border: '1.5px solid #f59e0b'
+                            background: 'rgba(245, 158, 11, 0.15)',
+                            backdropFilter: 'blur(6px)',
+                            WebkitBackdropFilter: 'blur(6px)',
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            border: '1px solid rgba(245, 158, 11, 0.3)',
+                            boxShadow: '0 2px 8px rgba(245, 158, 11, 0.15)'
                           }}>
-                            <span style={{ fontSize: '0.875rem', color: '#000000' }}>⭐</span>
+                            <span style={{ fontSize: '0.875rem', color: '#f59e0b', filter: 'drop-shadow(0 1px 2px rgba(245, 158, 11, 0.3))' }}>⭐</span>
                             <span style={{ 
-                              fontWeight: '800', 
-                              color: '#000000',
+                              fontWeight: '700', 
+                              color: '#1f2937',
                               fontSize: '0.75rem'
                             }}>
                               {ratingNum.toFixed(1)}
                             </span>
                             {hasReviewCount && (
                               <span style={{
-                                fontWeight: '600',
-                                color: '#64748b',
-                                fontSize: '0.7rem',
+                                fontWeight: '500',
+                                color: '#9ca3af',
+                                fontSize: '0.65rem',
                                 marginLeft: '2px'
                               }}>
                                 ({Number(reviewCount).toLocaleString()})
@@ -431,18 +736,22 @@ function ResultsSidebar({
                     gap: '6px',
                     marginBottom: '8px',
                     padding: '6px 10px',
-                    background: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
+                    background: 'rgba(255, 255, 255, 0.4)',
+                    backdropFilter: 'blur(6px)',
+                    WebkitBackdropFilter: 'blur(6px)',
                     borderRadius: '8px',
-                    fontSize: '0.8125rem',
-                    color: '#000000',
-                    fontWeight: '700',
-                    border: '1px solid #cbd5e1'
+                    fontSize: '0.75rem',
+                    color: '#6b7280',
+                    fontWeight: '500',
+                    border: '1px solid rgba(255, 255, 255, 0.3)',
+                    boxShadow: '0 1px 4px rgba(0, 0, 0, 0.05)'
                   }}>
                     <span style={{ 
-                      fontSize: '0.875rem',
-                      filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))'
+                      fontSize: '0.75rem',
+                      filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))',
+                      opacity: 0.7
                     }}>📍</span>
-                    <span style={{ flex: 1, fontSize: '0.8125rem', lineHeight: '1.4' }}>
+                    <span style={{ flex: 1, fontSize: '0.75rem', lineHeight: '1.4', color: '#6b7280' }}>
                       {(() => {
                         const addressParts = [];
                         if (place.street) addressParts.push(place.street);
@@ -456,14 +765,17 @@ function ResultsSidebar({
                     </span>
                     {place.distance_km && (
                       <span style={{
-                        fontWeight: '800',
-                        color: '#000000',
-                        fontSize: '0.8125rem',
-                        background: 'white',
-                        padding: '3px 8px',
-                        borderRadius: '6px',
-                        border: '1px solid #cbd5e1',
-                        whiteSpace: 'nowrap'
+                        fontWeight: '600',
+                        color: '#6b7280',
+                        fontSize: '0.7rem',
+                        background: 'rgba(255, 255, 255, 0.6)',
+                        backdropFilter: 'blur(6px)',
+                        WebkitBackdropFilter: 'blur(6px)',
+                        padding: '4px 10px',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(255, 255, 255, 0.4)',
+                        whiteSpace: 'nowrap',
+                        boxShadow: '0 1px 4px rgba(0, 0, 0, 0.06)'
                       }}>
                         {place.distance_km.toFixed(1)} km
                       </span>
@@ -518,16 +830,21 @@ function ResultsSidebar({
                     {/* Place Type Badge - on right */}
                     {place.place_type && (
                       <div style={{
-                        padding: '4px 10px',
-                        background: `linear-gradient(135deg, ${typeColor.light}, ${typeColor.light}dd)`,
-                        color: '#000000',
-                        borderRadius: '16px',
+                        padding: '6px 12px',
+                        background: 'rgba(255, 255, 255, 0.6)',
+                        backdropFilter: 'blur(8px)',
+                        WebkitBackdropFilter: 'blur(8px)',
+                        color: '#1f2937',
+                        borderRadius: '20px',
                         fontSize: '0.7rem',
-                        fontWeight: '800',
+                        fontWeight: '600',
                         textTransform: 'capitalize',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
                         letterSpacing: '0.2px',
-                        border: `1.5px solid ${typeColor.bg}`
+                        border: '1px solid rgba(255, 255, 255, 0.4)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
                       }}>
                         {place.place_type.replace('_', ' ')}
                       </div>
@@ -538,10 +855,13 @@ function ResultsSidebar({
                 {place.groupPlace && place.membersStatus && (
                     <div style={{
                       marginTop: '12px',
-                      padding: '10px',
-                      background: 'var(--gray-50)',
-                      borderRadius: '8px',
-                      border: '1px solid var(--border-light)'
+                      padding: '12px',
+                      background: 'rgba(255, 255, 255, 0.5)',
+                      backdropFilter: 'blur(8px)',
+                      WebkitBackdropFilter: 'blur(8px)',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(255, 255, 255, 0.4)',
+                      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
                     }}>
                       <div style={{
                         fontSize: '0.75rem',
@@ -608,16 +928,18 @@ function ResultsSidebar({
                   onClick={() => onExport('csv')}
                   style={{
                     flex: 1,
-                    padding: '10px 14px',
-                    background: 'linear-gradient(135deg, var(--success), var(--success-dark))',
+                    padding: '12px 16px',
+                    background: 'rgba(16, 185, 129, 0.8)',
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
                     color: 'white',
-                    border: 'none',
-                    borderRadius: '10px',
+                    border: '1px solid rgba(16, 185, 129, 0.5)',
+                    borderRadius: '12px',
                     cursor: 'pointer',
                     fontSize: '0.8125rem',
                     fontWeight: '700',
-                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
-                    transition: 'all 0.2s',
+                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+                    transition: 'all 0.2s ease',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -625,11 +947,13 @@ function ResultsSidebar({
                   }}
                   onMouseEnter={(e) => {
                     e.target.style.transform = 'translateY(-2px)';
-                    e.target.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.4)';
+                    e.target.style.background = 'rgba(16, 185, 129, 0.9)';
+                    e.target.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.4)';
                   }}
                   onMouseLeave={(e) => {
                     e.target.style.transform = 'translateY(0)';
-                    e.target.style.boxShadow = '0 2px 8px rgba(16, 185, 129, 0.3)';
+                    e.target.style.background = 'rgba(16, 185, 129, 0.8)';
+                    e.target.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.3)';
                   }}
                 >
                   <span>📄</span>
@@ -640,16 +964,18 @@ function ResultsSidebar({
                   onClick={() => onExport('geojson')}
                   style={{
                     flex: 1,
-                    padding: '10px 14px',
-                    background: 'linear-gradient(135deg, var(--accent-blue), var(--info-dark))',
+                    padding: '12px 16px',
+                    background: 'rgba(59, 130, 246, 0.8)',
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
                     color: 'white',
-                    border: 'none',
-                    borderRadius: '10px',
+                    border: '1px solid rgba(59, 130, 246, 0.5)',
+                    borderRadius: '12px',
                     cursor: 'pointer',
                     fontSize: '0.8125rem',
                     fontWeight: '700',
-                    boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)',
-                    transition: 'all 0.2s',
+                    boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
+                    transition: 'all 0.2s ease',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -657,11 +983,13 @@ function ResultsSidebar({
                   }}
                   onMouseEnter={(e) => {
                     e.target.style.transform = 'translateY(-2px)';
-                    e.target.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.4)';
+                    e.target.style.background = 'rgba(59, 130, 246, 0.9)';
+                    e.target.style.boxShadow = '0 6px 16px rgba(59, 130, 246, 0.4)';
                   }}
                   onMouseLeave={(e) => {
                     e.target.style.transform = 'translateY(0)';
-                    e.target.style.boxShadow = '0 2px 8px rgba(59, 130, 246, 0.3)';
+                    e.target.style.background = 'rgba(59, 130, 246, 0.8)';
+                    e.target.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
                   }}
                 >
                   <span>🗺️</span>

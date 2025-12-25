@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getGroupPlaces, getGroupDetails } from '../services/userListsApi';
+import ModernFilterDropdown from './ModernFilterDropdown';
 import './GroupPlaces.css';
 
 function GroupPlaces({ groupId, onBack, onShowOnMap, isShownOnMap = false }) {
@@ -13,9 +14,9 @@ function GroupPlaces({ groupId, onBack, onShowOnMap, isShownOnMap = false }) {
   // Place type filter: Set of selected place types
   const [placeTypeFilter, setPlaceTypeFilter] = useState(new Set(['brewery', 'restaurant', 'tourist_place', 'hotel']));
 
-  // UI state for collapsible sections
-  const [showPlaceTypeFilter, setShowPlaceTypeFilter] = useState(true);
-  const [showMemberFilters, setShowMemberFilters] = useState(true);
+  // New simplified filter state
+  const [selectedMembers, setSelectedMembers] = useState([]);
+  const [selectedStatuses, setSelectedStatuses] = useState([]);
 
   useEffect(() => {
     if (groupId) {
@@ -53,7 +54,7 @@ function GroupPlaces({ groupId, onBack, onShowOnMap, isShownOnMap = false }) {
     return Array.from(memberMap.values());
   }, [places]);
 
-  // Initialize filters: each member gets all statuses selected by default
+  // Initialize member filters when members change
   useEffect(() => {
     if (allMembers.length > 0 && Object.keys(memberFilters).length === 0) {
       const initialFilters = {};
@@ -63,6 +64,32 @@ function GroupPlaces({ groupId, onBack, onShowOnMap, isShownOnMap = false }) {
       setMemberFilters(initialFilters);
     }
   }, [allMembers, memberFilters]);
+
+  // Sync selectedMembers to memberFilters
+  useEffect(() => {
+    if (selectedMembers.length > 0) {
+      const newFilters = {};
+      selectedMembers.forEach(userIdStr => {
+        newFilters[userIdStr] = memberFilters[userIdStr] || new Set(selectedStatuses.length > 0 ? selectedStatuses : ['visited', 'in_wishlist', 'liked', 'none']);
+      });
+      setMemberFilters(newFilters);
+    } else {
+      setMemberFilters({});
+    }
+  }, [selectedMembers]);
+
+  // Update status filters for all selected members
+  useEffect(() => {
+    if (selectedStatuses.length > 0 && selectedMembers.length > 0) {
+      const newFilters = { ...memberFilters };
+      selectedMembers.forEach(userIdStr => {
+        if (newFilters[userIdStr]) {
+          newFilters[userIdStr] = new Set(selectedStatuses);
+        }
+      });
+      setMemberFilters(newFilters);
+    }
+  }, [selectedStatuses]);
 
   const loadGroupDetails = async () => {
     try {
@@ -100,13 +127,9 @@ function GroupPlaces({ groupId, onBack, onShowOnMap, isShownOnMap = false }) {
     return badges;
   };
 
-  // Filter places based on per-member filters AND place type filter
+  // Filter places based on selected members, statuses, and place types
   const filteredPlaces = useMemo(() => {
-    const activeMemberIds = Object.keys(memberFilters).filter(
-      userId => memberFilters[userId] && memberFilters[userId].size > 0
-    );
-
-    if (activeMemberIds.length === 0) {
+    if (selectedMembers.length === 0) {
       return [];
     }
 
@@ -117,15 +140,15 @@ function GroupPlaces({ groupId, onBack, onShowOnMap, isShownOnMap = false }) {
         return false;
       }
 
-      // Then check member status filters
-      return activeMemberIds.some(userIdStr => {
+      // Then check member and status filters
+      return selectedMembers.some(userIdStr => {
         const userId = parseInt(userIdStr);
-        const memberStatuses = memberFilters[userIdStr];
+        const memberStatuses = memberFilters[userIdStr] || new Set();
         const member = place.members?.find(m => String(m.user_id) === String(userId));
         
         if (!member) return false;
 
-        // Check if member's status matches any selected status in their filter
+        // Check if member's status matches any selected status
         if (memberStatuses.has('visited') && member.visited) return true;
         if (memberStatuses.has('in_wishlist') && member.in_wishlist) return true;
         if (memberStatuses.has('liked') && member.liked) return true;
@@ -134,36 +157,7 @@ function GroupPlaces({ groupId, onBack, onShowOnMap, isShownOnMap = false }) {
         return false;
       });
     });
-  }, [places, memberFilters, placeTypeFilter]);
-
-  const toggleMemberStatus = (userId, status) => {
-    setMemberFilters(prev => {
-      const newFilters = { ...prev };
-      if (!newFilters[userId]) {
-        newFilters[userId] = new Set();
-      } else {
-        newFilters[userId] = new Set(newFilters[userId]);
-      }
-      
-      if (newFilters[userId].has(status)) {
-        newFilters[userId].delete(status);
-      } else {
-        newFilters[userId].add(status);
-      }
-      
-      return newFilters;
-    });
-  };
-
-  const toggleAllStatusesForMember = (userId, selectAll) => {
-    setMemberFilters(prev => {
-      const newFilters = { ...prev };
-      newFilters[userId] = selectAll 
-        ? new Set(['visited', 'in_wishlist', 'liked', 'none'])
-        : new Set();
-      return newFilters;
-    });
-  };
+  }, [places, memberFilters, placeTypeFilter, selectedMembers]);
 
   const handleToggleMap = () => {
     if (!onShowOnMap) return;
@@ -244,7 +238,7 @@ function GroupPlaces({ groupId, onBack, onShowOnMap, isShownOnMap = false }) {
       <div style={{
         background: 'white',
         padding: '14px 20px 14px 20px',
-        paddingRight: '60px', // Extra padding on right to avoid overlap with modal close button
+        paddingRight: '60px',
         borderRadius: '0',
         borderBottom: '1px solid #e5e7eb',
         boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
@@ -397,7 +391,7 @@ function GroupPlaces({ groupId, onBack, onShowOnMap, isShownOnMap = false }) {
           🗺️
         </button>
           </div>
-      </div>
+        </div>
 
         {/* Stats Bar */}
         {places.length > 0 && (
@@ -468,446 +462,82 @@ function GroupPlaces({ groupId, onBack, onShowOnMap, isShownOnMap = false }) {
         width: '100%',
         boxSizing: 'border-box'
       }}>
-        {/* Place Type Filter - Collapsible Card */}
-      {places.length > 0 && (
+        {/* Modern Filter Dropdowns */}
+        {places.length > 0 && (
           <div style={{
-            background: 'white',
-            borderRadius: '12px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-            border: '1px solid #e5e7eb',
-            overflow: 'hidden',
-          flexShrink: 0
-        }}>
-            <button
-              onClick={() => setShowPlaceTypeFilter(!showPlaceTypeFilter)}
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                background: '#f9fafb',
-                border: 'none',
-                borderBottom: '1px solid #e5e7eb',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                transition: 'all 0.15s'
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            flexShrink: 0
+          }}>
+            {/* Category Filter */}
+            <ModernFilterDropdown
+              placeholder="Category"
+              options={[
+                { value: 'brewery', label: '🍺 Brewery' },
+                { value: 'restaurant', label: '🍽️ Restaurant' },
+                { value: 'tourist_place', label: '🗺️ Tourist Place' },
+                { value: 'hotel', label: '🏨 Hotel' }
+              ]}
+              selectedValues={Array.from(placeTypeFilter)}
+              onChange={(selected) => {
+                const newFilter = new Set(selected);
+                setPlaceTypeFilter(newFilter);
               }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = '#f3f4f6';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = '#f9fafb';
-              }}
-            >
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                <span style={{ fontSize: '1.125rem' }}>🏷️</span>
-                <h3 style={{
-                  margin: 0,
-                  fontSize: '0.875rem',
-                  fontWeight: '700',
-                  color: '#111827'
-                }}>
-                  Filter by Place Type
-                </h3>
-              </div>
-              <span style={{
-                fontSize: '0.875rem',
-                color: '#6b7280',
-                transition: 'transform 0.15s',
-                transform: showPlaceTypeFilter ? 'rotate(180deg)' : 'rotate(0deg)'
-              }}>
-                ▼
-              </span>
-            </button>
-            
-            {showPlaceTypeFilter && (
-              <div style={{
-                padding: '12px 16px',
-                borderTop: '1px solid #f3f4f6'
-              }}>
-                <div style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: '8px',
-                  alignItems: 'center'
-                }}>
-                  {[
-                    { key: 'brewery', label: '🍺 Brewery', color: '#f97316', light: '#fff7ed' },
-                    { key: 'restaurant', label: '🍽️ Restaurant', color: '#ef4444', light: '#fef2f2' },
-                    { key: 'tourist_place', label: '🗺️ Tourist Place', color: '#14b8a6', light: '#f0fdfa' },
-                    { key: 'hotel', label: '🏨 Hotel', color: '#06b6d4', light: '#ecfeff' }
-            ].map(type => {
-              const isChecked = placeTypeFilter.has(type.key);
-              return (
-                      <label
-                        key={type.key}
-                        style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  cursor: 'pointer',
-                  padding: '6px 12px',
-                          background: isChecked ? type.color : type.light,
-                          color: isChecked ? 'white' : '#374151',
-                          border: `1px solid ${isChecked ? type.color : '#e5e7eb'}`,
-                          borderRadius: '8px',
-                          fontSize: '0.8125rem',
-                          fontWeight: '600',
-                          transition: 'all 0.15s',
-                          boxShadow: isChecked ? `0 2px 4px ${type.color}40` : 'none'
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isChecked) {
-                            e.currentTarget.style.borderColor = type.color;
-                            e.currentTarget.style.transform = 'translateY(-1px)';
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isChecked) {
-                            e.currentTarget.style.borderColor = '#e5e7eb';
-                            e.currentTarget.style.transform = 'translateY(0)';
-                          }
-                        }}
-                      >
-                  <input
-                    type="checkbox"
-                    checked={isChecked}
-                    onChange={(e) => {
-                      const newFilter = new Set(placeTypeFilter);
-                      if (e.target.checked) {
-                        newFilter.add(type.key);
-                      } else {
-                        newFilter.delete(type.key);
-                      }
-                      setPlaceTypeFilter(newFilter);
-                    }}
-                          style={{
-                            marginRight: '8px',
-                            cursor: 'pointer',
-                            width: '16px',
-                            height: '16px'
-                          }}
-                  />
-                  {type.label}
-                </label>
-              );
-            })}
-            {placeTypeFilter.size < 4 && (
-              <button
-                type="button"
-                onClick={() => setPlaceTypeFilter(new Set(['brewery', 'restaurant', 'tourist_place', 'hotel']))}
-                style={{
-                        padding: '10px 16px',
-                        fontSize: '0.8125rem',
-                        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                  color: 'white',
-                  border: 'none',
-                        borderRadius: '10px',
-                  cursor: 'pointer',
-                        fontWeight: '700',
-                        transition: 'all 0.2s',
-                        boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.target.style.transform = 'translateY(-2px)';
-                        e.target.style.boxShadow = '0 4px 12px rgba(99, 102, 241, 0.4)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.target.style.transform = 'translateY(0)';
-                        e.target.style.boxShadow = '0 2px 8px rgba(99, 102, 241, 0.3)';
+              multiple={true}
+            />
+
+            {/* Member Filter */}
+            {allMembers.length > 0 && (
+              <ModernFilterDropdown
+                placeholder="Member"
+                options={allMembers.map(member => ({
+                  value: String(member.user_id),
+                  label: member.username
+                }))}
+                selectedValues={selectedMembers}
+                onChange={(selected) => {
+                  setSelectedMembers(selected);
+                  // Initialize status filters for newly selected members
+                  const newFilters = { ...memberFilters };
+                  selected.forEach(userIdStr => {
+                    if (!newFilters[userIdStr]) {
+                      newFilters[userIdStr] = new Set(['visited', 'in_wishlist', 'liked', 'none']);
+                    }
+                  });
+                  setMemberFilters(newFilters);
                 }}
-              >
-                Select All
-              </button>
+                multiple={true}
+              />
             )}
-                </div>
-            {placeTypeFilter.size === 0 && (
-                  <div style={{
-                    marginTop: '12px',
-                    padding: '12px',
-                    background: '#fef2f2',
-                    border: '1.5px solid #fecaca',
-                    borderRadius: '8px',
-                    fontSize: '0.8125rem',
-                    color: '#991b1b',
-                    fontWeight: '700'
-                  }}>
-                    ⚠️ No place types selected - showing no places
-                  </div>
+
+            {/* Status Filter - Only show if members are selected */}
+            {selectedMembers.length > 0 && (
+              <ModernFilterDropdown
+                placeholder="Status"
+                options={[
+                  { value: 'visited', label: '✓ Visited' },
+                  { value: 'in_wishlist', label: '⭐ Wishlist' },
+                  { value: 'liked', label: '❤️ Liked' },
+                  { value: 'none', label: '○ Not in lists' }
+                ]}
+                selectedValues={selectedStatuses}
+                onChange={(selected) => {
+                  setSelectedStatuses(selected);
+                  // Update status filters for all selected members
+                  const newFilters = { ...memberFilters };
+                  selectedMembers.forEach(userIdStr => {
+                    if (newFilters[userIdStr]) {
+                      newFilters[userIdStr] = new Set(selected);
+                    }
+                  });
+                  setMemberFilters(newFilters);
+                }}
+                multiple={true}
+              />
             )}
           </div>
-            )}
-        </div>
-      )}
-
-        {/* Member Filters - Collapsible Card */}
-      {places.length > 0 && allMembers.length > 0 && (
-          <div style={{
-            background: 'white',
-            borderRadius: '12px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-            border: '1px solid #e5e7eb',
-            overflow: 'hidden',
-          flexShrink: 0
-        }}>
-            <button
-              onClick={() => setShowMemberFilters(!showMemberFilters)}
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                background: '#f9fafb',
-                border: 'none',
-                borderBottom: '1px solid #e5e7eb',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                transition: 'all 0.15s'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = '#f3f4f6';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = '#f9fafb';
-              }}
-            >
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                <span style={{ fontSize: '1.125rem' }}>🔍</span>
-                <h3 style={{
-                  margin: 0,
-                  fontSize: '0.875rem',
-                  fontWeight: '700',
-                  color: '#111827'
-                }}>
-                  Filter by Member Status
-                </h3>
-              </div>
-              <span style={{
-                fontSize: '0.875rem',
-                color: '#6b7280',
-                transition: 'transform 0.15s',
-                transform: showMemberFilters ? 'rotate(180deg)' : 'rotate(0deg)'
-              }}>
-                ▼
-              </span>
-            </button>
-            
-            {showMemberFilters && (
-              <div style={{
-                padding: '12px 16px',
-                borderTop: '1px solid #f3f4f6',
-                maxHeight: '400px',
-                overflowY: 'auto'
-              }}>
-          {allMembers.map(member => {
-            const userIdStr = String(member.user_id);
-            const memberFilter = memberFilters[userIdStr] || new Set();
-            const hasAnySelected = memberFilter.size > 0;
-            const allSelected = memberFilter.has('visited') && 
-                               memberFilter.has('in_wishlist') && 
-                               memberFilter.has('liked') && 
-                               memberFilter.has('none');
-
-            return (
-                    <div
-                      key={member.user_id}
-                      style={{
-                        marginBottom: '12px',
-                padding: '12px',
-                        background: '#ffffff',
-                        borderRadius: '10px',
-                        border: '1px solid #e5e7eb',
-                        transition: 'all 0.15s'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = '#d1d5db';
-                        e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = '#e5e7eb';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }}
-                    >
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  alignItems: 'center',
-                        marginBottom: '10px'
-                      }}>
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px'
-                        }}>
-                          <div style={{
-                            width: '28px',
-                            height: '28px',
-                            borderRadius: '50%',
-                            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: 'white',
-                            fontWeight: '700',
-                            fontSize: '0.75rem',
-                            boxShadow: '0 2px 4px rgba(99, 102, 241, 0.2)'
-                          }}>
-                            {member.username.charAt(0).toUpperCase()}
-                          </div>
-                          <strong style={{
-                            fontSize: '0.8125rem',
-                            fontWeight: '700',
-                            color: '#111827'
-                          }}>
-                            {member.username}
-                          </strong>
-                        </div>
-                  <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            toggleAllStatusesForMember(userIdStr, !allSelected);
-                          }}
-                    style={{
-                            padding: '5px 12px',
-                            fontSize: '0.75rem',
-                            background: allSelected ? '#6b7280' : '#6366f1',
-                      color: 'white',
-                      border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontWeight: '600',
-                            transition: 'all 0.15s',
-                            boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
-                            whiteSpace: 'nowrap',
-                            flexShrink: 0
-                          }}
-                          onMouseEnter={(e) => {
-                            e.target.style.transform = 'translateY(-1px)';
-                            e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.15)';
-                            e.target.style.opacity = '0.9';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.target.style.transform = 'translateY(0)';
-                            e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.1)';
-                            e.target.style.opacity = '1';
-                    }}
-                  >
-                    {allSelected ? 'Clear All' : 'Select All'}
-                  </button>
-                </div>
-                
-                      <div style={{
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        gap: '6px'
-                      }}>
-                        {[
-                          { key: 'visited', label: '✓ Visited', color: '#10b981', light: '#d1fae5' },
-                          { key: 'in_wishlist', label: '⭐ Wishlist', color: '#f59e0b', light: '#fef3c7' },
-                          { key: 'liked', label: '❤️ Liked', color: '#ec4899', light: '#fce7f3' },
-                          { key: 'none', label: '○ Not in lists', color: '#6b7280', light: '#f3f4f6' }
-                  ].map(status => {
-                    const isChecked = memberFilter.has(status.key);
-                    return (
-                            <label
-                              key={status.key}
-                              style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        cursor: 'pointer',
-                                padding: '5px 10px',
-                                background: isChecked ? status.color : status.light,
-                                color: isChecked ? 'white' : '#374151',
-                                border: `1px solid ${isChecked ? status.color : '#e5e7eb'}`,
-                                borderRadius: '6px',
-                                fontSize: '0.75rem',
-                                fontWeight: '600',
-                                transition: 'all 0.15s',
-                                boxShadow: isChecked ? `0 1px 3px ${status.color}40` : 'none'
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!isChecked) {
-                                  e.currentTarget.style.borderColor = status.color;
-                                  e.currentTarget.style.transform = 'translateY(-1px)';
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                if (!isChecked) {
-                                  e.currentTarget.style.borderColor = '#e5e7eb';
-                                  e.currentTarget.style.transform = 'translateY(0)';
-                                }
-                              }}
-                            >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleMemberStatus(userIdStr, status.key)}
-                                style={{
-                                  marginRight: '6px',
-                                  cursor: 'pointer',
-                                  width: '14px',
-                                  height: '14px'
-                                }}
-                        />
-                        {status.label}
-                      </label>
-                    );
-                  })}
-                </div>
-                
-                {!hasAnySelected && (
-                  <div style={{ 
-                          marginTop: '10px',
-                          padding: '8px',
-                          background: '#fef2f2',
-                          border: '1px solid #fecaca',
-                          borderRadius: '6px',
-                          fontSize: '0.6875rem',
-                          color: '#991b1b',
-                          fontWeight: '600'
-                        }}>
-                          ⚠️ No filters selected - showing no places for this member
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          
-          <div style={{ 
-            marginTop: '12px', 
-                  padding: '10px 12px',
-                  background: '#eff6ff',
-                  borderRadius: '8px',
-                  border: '1px solid #bfdbfe',
-                  fontSize: '0.75rem',
-                  color: '#1e40af',
-                  fontWeight: '600',
-                  lineHeight: '1.5'
-                }}>
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: '8px'
-                  }}>
-                    <span style={{ fontSize: '1rem', flexShrink: 0 }}>💡</span>
-                    <div style={{ fontSize: '0.75rem' }}>
-                      <strong style={{ color: '#1e40af' }}>Tip:</strong> Select statuses for each member to show places matching any of those combinations. 
-            For example: "User1 visited" OR "User2 wishlist" will show places where either condition is true.
-                    </div>
-                  </div>
-          </div>
-              </div>
-            )}
-        </div>
-      )}
+        )}
 
         {/* Places List */}
       {places.length === 0 ? (

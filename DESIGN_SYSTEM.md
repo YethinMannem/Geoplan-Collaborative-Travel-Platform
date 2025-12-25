@@ -229,3 +229,4 @@ All styles are centralized in:
 
 This design system creates a professional, modern, and user-friendly interface that enhances the overall user experience of the GeoPlan application.
 
+

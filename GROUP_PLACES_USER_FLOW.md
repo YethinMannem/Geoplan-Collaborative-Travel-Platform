@@ -326,3 +326,4 @@ This document explains the complete step-by-step flow of how users add places to
 
 No extra steps needed! The automatic sync makes it effortless for users to share places with their groups, enabling seamless collaboration for trip planning and place discovery.
 
+

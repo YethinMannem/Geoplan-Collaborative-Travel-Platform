@@ -1,11 +1,47 @@
 import React, { useState } from 'react';
 
+// Icon components for place types (Heroicons-style outline icons)
+const BreweryIcon = ({ isActive }) => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={isActive ? '#6366f1' : '#6b7280'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 2v6m6-6v6M5 8h14a1 1 0 0 1 1 1v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a1 1 0 0 1 1-1z" />
+    <path d="M9 14h6" />
+  </svg>
+);
+
+const RestaurantIcon = ({ isActive }) => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={isActive ? '#6366f1' : '#6b7280'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" />
+    <path d="M7 2v20" />
+    <path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3z" />
+    <path d="M21 15v7" />
+  </svg>
+);
+
+const TouristPlaceIcon = ({ isActive }) => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={isActive ? '#6366f1' : '#6b7280'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+    <circle cx="12" cy="10" r="3" />
+  </svg>
+);
+
+const HotelIcon = ({ isActive }) => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={isActive ? '#6366f1' : '#6b7280'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 21h18" />
+    <path d="M5 21V7l8-4v18" />
+    <path d="M19 21V11l-6-4" />
+    <path d="M9 9v0" />
+    <path d="M9 12v0" />
+    <path d="M9 15v0" />
+    <path d="M9 18v0" />
+  </svg>
+);
+
 // Place type configuration
 const PLACE_TYPES = [
-  { value: 'brewery', label: 'Brewery', icon: '🍺', color: '#8B4513', bgColor: '#F5E6D3' },
-  { value: 'restaurant', label: 'Restaurant', icon: '🍽️', color: '#FF6B6B', bgColor: '#FFE5E5' },
-  { value: 'tourist_place', label: 'Tourist Place', icon: '🗺️', color: '#4ECDC4', bgColor: '#E0F7F5' },
-  { value: 'hotel', label: 'Hotel', icon: '🏨', color: '#95E1D3', bgColor: '#E8F8F5' },
+  { value: 'brewery', label: 'Brewery', Icon: BreweryIcon, color: '#8B4513', bgColor: '#F5E6D3' },
+  { value: 'restaurant', label: 'Restaurant', Icon: RestaurantIcon, color: '#FF6B6B', bgColor: '#FFE5E5' },
+  { value: 'tourist_place', label: 'Tourist Place', Icon: TouristPlaceIcon, color: '#4ECDC4', bgColor: '#E0F7F5' },
+  { value: 'hotel', label: 'Hotel', Icon: HotelIcon, color: '#95E1D3', bgColor: '#E8F8F5' },
 ];
 
 // US States with approximate center coordinates
@@ -183,39 +219,38 @@ function SearchControls({ onSearch, loading, map }) {
         marginBottom: '24px',
         fontSize: '1.75rem',
         fontWeight: '800',
-        color: '#000000',
+        color: '#1f2937',
         letterSpacing: '-0.5px',
         display: 'flex',
         alignItems: 'center',
         gap: '12px'
       }}>
-        <span style={{ fontSize: '2rem' }}>🔍</span>
-        <span style={{ color: '#000000' }}>Find Places</span>
+        <span style={{ color: '#1f2937' }}>Find Places</span>
       </h3>
 
       <form onSubmit={handleSubmit}>
         {/* Location Selection - Primary Action */}
         <div className="form-group" style={{ 
-          marginBottom: '24px',
+          marginBottom: '32px',
           padding: '20px',
-          background: 'linear-gradient(135deg, #eef2ff, #e0e7ff)',
+          background: 'rgba(255, 255, 255, 0.5)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
           borderRadius: '16px',
-          border: '2px solid #c7d2fe',
-          boxShadow: '0 2px 8px rgba(99, 102, 241, 0.1)'
+          border: '1px solid rgba(255, 255, 255, 0.4)',
+          boxShadow: '0 4px 16px rgba(31, 38, 135, 0.12)'
         }}>
           <label style={{ 
             fontSize: '0.9375rem', 
-            fontWeight: '800', 
-            color: '#000000',
+            fontWeight: '600', 
+            color: '#1f2937',
             marginBottom: '12px',
             display: 'flex',
             alignItems: 'center',
-            gap: '10px',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px'
+            gap: '10px'
           }}>
-            <span style={{ fontSize: '1.375rem' }}>📍</span>
-            <span style={{ color: '#000000' }}>Where to search?</span>
+            <span style={{ fontSize: '1.125rem' }}>📍</span>
+            <span style={{ color: '#1f2937' }}>Where to search?</span>
           </label>
 
           {/* Use My Location Button */}
@@ -267,13 +302,28 @@ function SearchControls({ onSearch, loading, map }) {
           </button>
 
           <div style={{ 
-            textAlign: 'center', 
-            margin: '16px 0',
-            fontSize: '0.875rem',
-            fontWeight: '700',
-            color: '#000000'
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '20px 0',
+            gap: '12px'
           }}>
-            OR
+            <div style={{
+              flex: 1,
+              height: '1px',
+              background: 'rgba(0, 0, 0, 0.1)'
+            }}></div>
+            <span style={{
+              fontSize: '0.8125rem',
+              fontWeight: '600',
+              color: '#6b7280',
+              padding: '0 8px'
+            }}>OR</span>
+            <div style={{
+              flex: 1,
+              height: '1px',
+              background: 'rgba(0, 0, 0, 0.1)'
+            }}></div>
           </div>
 
           {/* State Selection Dropdown */}
@@ -287,12 +337,14 @@ function SearchControls({ onSearch, loading, map }) {
                 paddingRight: hasLocation ? '50px' : '16px',
                 fontSize: '0.9375rem',
                 fontWeight: '600',
-                border: '2px solid #c7d2fe',
+                border: '1px solid rgba(255, 255, 255, 0.4)',
                 borderRadius: '12px',
-                background: 'white',
-                color: '#000000',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                transition: 'all 0.2s',
+                background: 'rgba(255, 255, 255, 0.7)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                color: '#1f2937',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+                transition: 'all 0.2s ease',
                 cursor: 'pointer',
                 appearance: 'none',
                 backgroundImage: hasLocation 
@@ -303,12 +355,14 @@ function SearchControls({ onSearch, loading, map }) {
                 backgroundSize: '20px'
               }}
               onFocus={(e) => {
-                e.target.style.borderColor = '#6366f1';
-                e.target.style.boxShadow = '0 4px 12px rgba(99, 102, 241, 0.2)';
+                e.target.style.borderColor = 'rgba(99, 102, 241, 0.6)';
+                e.target.style.background = 'rgba(255, 255, 255, 0.9)';
+                e.target.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.15), 0 4px 12px rgba(99, 102, 241, 0.2)';
               }}
               onBlur={(e) => {
-                e.target.style.borderColor = '#c7d2fe';
-                e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                e.target.style.borderColor = 'rgba(255, 255, 255, 0.4)';
+                e.target.style.background = 'rgba(255, 255, 255, 0.7)';
+                e.target.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08)';
               }}
             >
               <option value="">Select a state...</option>
@@ -359,13 +413,15 @@ function SearchControls({ onSearch, loading, map }) {
           {hasLocation && selectedState && (
             <div style={{
               padding: '16px 18px',
-              background: 'white',
+              background: 'rgba(255, 255, 255, 0.7)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
               borderRadius: '12px',
               marginTop: '16px',
-              border: '2px solid #6366f1',
+              border: '1px solid rgba(99, 102, 241, 0.4)',
               fontSize: '0.875rem',
               fontWeight: '600',
-              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.2)',
+              boxShadow: '0 4px 16px rgba(99, 102, 241, 0.2)',
               animation: 'fadeIn 0.3s ease-out'
             }}>
               <div style={{ 
@@ -414,26 +470,29 @@ function SearchControls({ onSearch, loading, map }) {
         </div>
 
         {/* Search Type Toggle */}
-        <div className="form-group" style={{ marginBottom: '24px' }}>
+        <div className="form-group" style={{ marginBottom: '32px' }}>
           <label style={{ 
             fontSize: '0.9375rem', 
-            fontWeight: '800', 
-            color: '#000000',
+            fontWeight: '600', 
+            color: '#1f2937',
             marginBottom: '12px',
             display: 'flex',
             alignItems: 'center',
             gap: '10px'
           }}>
-            <span style={{ fontSize: '1.375rem' }}>🔎</span>
-            <span style={{ color: '#000000' }}>Search Type</span>
+            <span style={{ fontSize: '1.125rem' }}>🔎</span>
+            <span style={{ color: '#1f2937' }}>Search type</span>
           </label>
           <div style={{
             display: 'flex',
             gap: '8px',
-            background: '#f3f4f6',
+            background: 'rgba(255, 255, 255, 0.4)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
             padding: '4px',
             borderRadius: '12px',
-            border: '2px solid #e5e7eb'
+            border: '1px solid rgba(255, 255, 255, 0.3)',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
           }}>
         <button
           type="button"
@@ -482,7 +541,7 @@ function SearchControls({ onSearch, loading, map }) {
 
         {/* Search Radius or Number of Results */}
         {queryType === 'radius' ? (
-          <div className="form-group" style={{ marginBottom: '24px' }}>
+          <div className="form-group" style={{ marginBottom: '32px' }}>
             <label style={{
               display: 'flex',
               alignItems: 'center',
@@ -491,15 +550,15 @@ function SearchControls({ onSearch, loading, map }) {
             }}>
               <span style={{ 
                 fontSize: '0.9375rem', 
-                fontWeight: '800', 
-                color: '#000000'
+                fontWeight: '600', 
+                color: '#1f2937'
               }}>
-                Search Radius
+                Search radius
               </span>
               <span style={{ 
                 fontSize: '0.8125rem', 
-                color: '#000000',
-                fontWeight: '700'
+                color: '#6b7280',
+                fontWeight: '500'
               }}>
                 (km)
               </span>
@@ -509,9 +568,12 @@ function SearchControls({ onSearch, loading, map }) {
               gap: '12px', 
               alignItems: 'center',
               padding: '12px',
-              background: '#f9fafb',
+              background: 'rgba(255, 255, 255, 0.5)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
               borderRadius: '12px',
-              border: '2px solid #e5e7eb'
+              border: '1px solid rgba(255, 255, 255, 0.4)',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
             }}>
               <input
                 type="range"
@@ -539,50 +601,57 @@ function SearchControls({ onSearch, loading, map }) {
                 }}
                 style={{ 
                   width: '70px',
-                  padding: '10px',
+                  padding: '8px 10px',
                   textAlign: 'center',
-                  fontWeight: '800',
+                  fontWeight: '700',
                   fontSize: '0.9375rem',
-                  border: '2px solid #6366f1',
+                  border: '1px solid rgba(99, 102, 241, 0.3)',
                   borderRadius: '8px',
-                  background: 'white',
-                  color: '#000000'
+                  background: 'rgba(255, 255, 255, 0.8)',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
+                  color: '#1f2937',
+                  marginTop: '0'
                 }}
               />
             </div>
             <div style={{ 
-              fontSize: '0.875rem', 
-              color: '#000000', 
+              fontSize: '0.8125rem', 
+              color: '#6b7280', 
               marginTop: '10px',
               textAlign: 'center',
-              fontWeight: '800',
-              background: 'linear-gradient(135deg, #eef2ff, #e0e7ff)',
-              padding: '8px 12px',
-              borderRadius: '8px',
-              border: '1px solid #c7d2fe'
+              fontWeight: '500',
+              background: 'rgba(99, 102, 241, 0.08)',
+              padding: '6px 12px',
+              borderRadius: '6px',
+              border: 'none',
+              boxShadow: 'none'
             }}>
               {km} km radius • ~{Math.round(parseFloat(km) * 0.621371)} miles
             </div>
           </div>
         ) : (
-          <div className="form-group" style={{ marginBottom: '24px' }}>
+          <div className="form-group" style={{ marginBottom: '32px' }}>
             <label style={{
               fontSize: '0.9375rem', 
-              fontWeight: '800', 
-              color: '#000000',
+              fontWeight: '600', 
+              color: '#1f2937',
               marginBottom: '12px',
               display: 'block'
             }}>
-              Number of Results
+              Number of results
             </label>
             <div style={{ 
               display: 'flex', 
               gap: '12px', 
               alignItems: 'center',
               padding: '12px',
-              background: '#f9fafb',
+              background: 'rgba(255, 255, 255, 0.5)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
               borderRadius: '12px',
-              border: '2px solid #e5e7eb'
+              border: '1px solid rgba(255, 255, 255, 0.4)',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
             }}>
               <input
                 type="range"
@@ -610,27 +679,31 @@ function SearchControls({ onSearch, loading, map }) {
                 }}
                 style={{ 
                   width: '70px',
-                  padding: '10px',
+                  padding: '8px 10px',
                   textAlign: 'center',
-                  fontWeight: '800',
+                  fontWeight: '700',
                   fontSize: '0.9375rem',
-                  border: '2px solid #6366f1',
+                  border: '1px solid rgba(99, 102, 241, 0.3)',
                   borderRadius: '8px',
-                  background: 'white',
-                  color: '#000000'
+                  background: 'rgba(255, 255, 255, 0.8)',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
+                  color: '#1f2937',
+                  marginTop: '0'
                 }}
               />
             </div>
             <div style={{ 
-              fontSize: '0.875rem', 
-              color: '#000000', 
+              fontSize: '0.8125rem', 
+              color: '#6b7280', 
               marginTop: '10px',
               textAlign: 'center',
-              fontWeight: '800',
-              background: 'linear-gradient(135deg, #eef2ff, #e0e7ff)',
-              padding: '8px 12px',
-              borderRadius: '8px',
-              border: '1px solid #c7d2fe'
+              fontWeight: '500',
+              background: 'rgba(99, 102, 241, 0.08)',
+              padding: '6px 12px',
+              borderRadius: '6px',
+              border: 'none',
+              boxShadow: 'none'
             }}>
               Show {k} nearest {parseInt(k) === 1 ? 'place' : 'places'}
             </div>
@@ -641,19 +714,19 @@ function SearchControls({ onSearch, loading, map }) {
         <div className="form-group" style={{ marginBottom: '24px' }}>
           <label style={{ 
             fontSize: '0.9375rem', 
-            fontWeight: '800', 
-            color: '#000000',
+            fontWeight: '600', 
+            color: '#1f2937',
             marginBottom: '12px',
             display: 'flex',
             alignItems: 'center',
             gap: '10px'
           }}>
-            <span style={{ fontSize: '1.375rem' }}>🏷️</span>
-            <span style={{ color: '#000000' }}>Filter by Type</span>
+            <span style={{ fontSize: '1.125rem' }}>🏷️</span>
+            <span style={{ color: '#1f2937' }}>Filter by type</span>
             <span style={{ 
               fontSize: '0.8125rem', 
-              fontWeight: '600',
-              color: '#000000',
+              fontWeight: '500',
+              color: '#6b7280',
               marginLeft: '4px'
             }}>
               (optional)
@@ -666,6 +739,8 @@ function SearchControls({ onSearch, loading, map }) {
           }}>
             {PLACE_TYPES.map(type => {
               const isSelected = placeTypeFilter.includes(type.value);
+              const IconComponent = type.Icon;
+              
               return (
                 <button
                   key={type.value}
@@ -674,42 +749,47 @@ function SearchControls({ onSearch, loading, map }) {
                   style={{
                     padding: '14px 12px',
                     background: isSelected 
-                      ? type.bgColor 
-                      : '#f9fafb',
-                    border: `2px solid ${isSelected ? type.color : '#e5e7eb'}`,
+                      ? `rgba(255, 255, 255, 0.8)` 
+                      : 'rgba(255, 255, 255, 0.5)',
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
+                    border: `1px solid ${isSelected ? 'rgba(99, 102, 241, 0.4)' : 'rgba(255, 255, 255, 0.4)'}`,
                     borderRadius: '12px',
                     cursor: 'pointer',
-                    transition: 'all 0.2s',
+                    transition: 'all 0.2s ease',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
                     gap: '8px',
                     boxShadow: isSelected 
-                      ? `0 4px 12px ${type.color}30` 
-                      : '0 1px 3px rgba(0,0,0,0.1)'
+                      ? '0 4px 16px rgba(99, 102, 241, 0.2)' 
+                      : '0 2px 8px rgba(0, 0, 0, 0.08)'
                   }}
                   onMouseEnter={(e) => {
                     if (!isSelected) {
-                      e.target.style.background = '#f3f4f6';
-                      e.target.style.borderColor = type.color;
+                      e.target.style.background = 'rgba(255, 255, 255, 0.7)';
+                      e.target.style.borderColor = 'rgba(99, 102, 241, 0.3)';
                       e.target.style.transform = 'translateY(-2px)';
+                      e.target.style.boxShadow = '0 4px 12px rgba(99, 102, 241, 0.15)';
                     }
                   }}
                   onMouseLeave={(e) => {
                     if (!isSelected) {
-                      e.target.style.background = '#f9fafb';
-                      e.target.style.borderColor = '#e5e7eb';
+                      e.target.style.background = 'rgba(255, 255, 255, 0.5)';
+                      e.target.style.borderColor = 'rgba(255, 255, 255, 0.4)';
                       e.target.style.transform = 'translateY(0)';
+                      e.target.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08)';
                     }
                   }}
                 >
-                  <span style={{ fontSize: '2rem' }}>{type.icon}</span>
+                  <IconComponent isActive={isSelected} />
                   <span style={{ 
                     fontSize: '0.875rem',
                     textAlign: 'center',
                     lineHeight: '1.3',
-                    fontWeight: '700',
-                    color: '#000000'
+                    fontWeight: isSelected ? '600' : '500',
+                    color: isSelected ? '#6366f1' : '#6b7280',
+                    transition: 'all 0.2s ease'
                   }}>
                     {type.label}
                   </span>

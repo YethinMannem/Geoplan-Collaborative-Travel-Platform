@@ -161,75 +161,81 @@ function Groups({ onViewGroupPlaces, onClose }) {
       borderRadius: '0',
       boxShadow: 'none'
     }}>
-      {/* Header - Clean Card Style */}
+      {/* Header - Integrated Glass Style */}
       <div style={{ 
-        padding: '24px 24px 20px 24px',
-        borderBottom: '1px solid #e5e7eb',
+        padding: '0 20px',
+        height: '52px',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.3)',
         flexShrink: 0,
-        background: 'white'
+        background: 'rgba(99, 102, 241, 0.1)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        borderTopLeftRadius: '24px',
+        borderTopRightRadius: '24px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between'
       }}>
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'space-between',
-          marginBottom: '0'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '10px',
-              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '1.5rem'
-            }}>
-              👥
-            </div>
-            <h2 style={{ 
-              margin: 0, 
-              color: '#111827', 
-              fontSize: '1.5rem', 
-              fontWeight: '700',
-              letterSpacing: '-0.3px'
-            }}>
-              Groups
-            </h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{
+            width: '20px',
+            height: '20px',
+            borderRadius: '6px',
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '14px',
+            flexShrink: 0
+          }}>
+            👥
           </div>
-          <button 
-            onClick={() => setShowCreateModal(true)}
-            style={{
-              padding: '6px 12px',
-              background: '#6366f1',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '0.75rem',
-              fontWeight: '600',
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              boxShadow: '0 1px 3px rgba(99, 102, 241, 0.25)',
-              whiteSpace: 'nowrap'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = '#4f46e5';
-              e.target.style.transform = 'translateY(-1px)';
-              e.target.style.boxShadow = '0 2px 6px rgba(99, 102, 241, 0.35)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = '#6366f1';
-              e.target.style.transform = 'translateY(0)';
-              e.target.style.boxShadow = '0 1px 3px rgba(99, 102, 241, 0.25)';
-            }}
-          >
-            <span style={{ fontSize: '0.875rem' }}>+</span>
-            <span>Create</span>
-          </button>
+          <h2 style={{ 
+            margin: 0, 
+            color: '#1f2937', 
+            fontSize: '16px', 
+            fontWeight: '600',
+            letterSpacing: '-0.1px'
+          }}>
+            Groups
+          </h2>
         </div>
+        <button 
+          onClick={() => setShowCreateModal(true)}
+          style={{
+            padding: '4px 10px',
+            height: '26px',
+            background: 'rgba(99, 102, 241, 0.9)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            color: 'white',
+            border: '1px solid rgba(99, 102, 241, 0.6)',
+            borderRadius: '16px',
+            fontSize: '12px',
+            fontWeight: '600',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '3px',
+            boxShadow: '0 1px 4px rgba(99, 102, 241, 0.25)',
+            whiteSpace: 'nowrap'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.background = 'rgba(79, 70, 229, 0.95)';
+            e.target.style.transform = 'translateY(-1px)';
+            e.target.style.boxShadow = '0 2px 8px rgba(99, 102, 241, 0.35)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.background = 'rgba(99, 102, 241, 0.9)';
+            e.target.style.transform = 'translateY(0)';
+            e.target.style.boxShadow = '0 1px 4px rgba(99, 102, 241, 0.25)';
+          }}
+        >
+          <span style={{ fontSize: '12px', fontWeight: '600', lineHeight: '1' }}>+</span>
+          <span>Create</span>
+        </button>
       </div>
 
       {/* Success Message Toast */}
@@ -255,18 +261,21 @@ function Groups({ onViewGroupPlaces, onClose }) {
       {/* Error Message */}
       {error && (
         <div style={{
-          margin: '16px 24px',
+          margin: '20px 32px',
           padding: '12px 16px',
-          background: '#fee2e2',
-          color: '#dc2626',
+          background: 'rgba(239, 68, 68, 0.15)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          color: '#1f2937',
           borderRadius: '12px',
-          border: '2px solid #ef4444',
+          border: '1px solid rgba(239, 68, 68, 0.4)',
           fontSize: '0.875rem',
           fontWeight: '600',
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
-          position: 'relative'
+          position: 'relative',
+          boxShadow: '0 2px 8px rgba(239, 68, 68, 0.15)'
         }}>
           <span>❌</span>
           <span style={{ flex: 1 }}>{error}</span>
@@ -371,10 +380,14 @@ function Groups({ onViewGroupPlaces, onClose }) {
             className="modal-content"
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: 'white',
+              /* Glassmorphism Effect */
+              background: 'rgba(255, 255, 255, 0.75)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255, 255, 255, 0.4)',
               padding: '32px',
-              borderRadius: '20px',
-              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+              borderRadius: '24px',
+              boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.15)',
               maxWidth: '500px',
               width: '90%',
               animation: 'scaleIn 0.3s ease-out'
@@ -552,7 +565,7 @@ function Groups({ onViewGroupPlaces, onClose }) {
         flex: 1, 
         overflowY: 'auto', 
         overflowX: 'hidden',
-        padding: '24px',
+        padding: '32px',
         minHeight: 0, // Critical for flex scrolling
         WebkitOverflowScrolling: 'touch' // Smooth scrolling on iOS
       }}>
@@ -568,38 +581,41 @@ function Groups({ onViewGroupPlaces, onClose }) {
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
-                padding: '10px 16px',
-                background: '#f3f4f6',
-                color: '#000000',
-                border: '2px solid #e5e7eb',
-                borderRadius: '12px',
-                fontSize: '0.875rem',
-                fontWeight: '600',
+                gap: '6px',
+                padding: '6px 12px',
+                background: 'transparent',
+                border: 'none',
+                color: '#6366f1',
+                fontSize: '14px',
+                fontWeight: '500',
                 cursor: 'pointer',
-                marginBottom: '24px',
-                transition: 'all 0.2s'
+                marginBottom: '20px',
+                transition: 'all 0.2s ease',
+                borderRadius: '8px'
               }}
               onMouseEnter={(e) => {
-                e.target.style.background = '#e5e7eb';
-                e.target.style.transform = 'translateX(-4px)';
+                e.target.style.background = 'rgba(99, 102, 241, 0.1)';
+                e.target.style.color = '#4f46e5';
               }}
               onMouseLeave={(e) => {
-                e.target.style.background = '#f3f4f6';
-                e.target.style.transform = 'translateX(0)';
+                e.target.style.background = 'transparent';
+                e.target.style.color = '#6366f1';
               }}
             >
-              <span>←</span> Back to Groups
+              <span style={{ fontSize: '16px', lineHeight: '1' }}>←</span>
+              <span>Back</span>
           </button>
           
-            {/* Group Info Card - Modern Design */}
+            {/* Group Info Card - Glass Design */}
             <div style={{
-              background: 'white',
-              padding: '20px',
-              borderRadius: '12px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)',
-              border: '1px solid #e5e7eb',
-              marginBottom: '16px'
+              background: 'rgba(255, 255, 255, 0.85)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
+              padding: '24px',
+              borderRadius: '16px',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)',
+              border: '1px solid rgba(255, 255, 255, 0.5)',
+              marginBottom: '20px'
             }}>
               <div style={{
                 display: 'flex',
@@ -640,15 +656,21 @@ function Groups({ onViewGroupPlaces, onClose }) {
                 <div style={{
                   padding: '6px 12px',
                   background: selectedGroup.group.your_role === 'admin' 
-                    ? '#fef3c7' 
-                    : '#e0f2fe',
-                  borderRadius: '8px',
+                    ? 'rgba(254, 243, 199, 0.8)' 
+                    : 'rgba(224, 242, 254, 0.8)',
+                  backdropFilter: 'blur(6px)',
+                  WebkitBackdropFilter: 'blur(6px)',
+                  borderRadius: '12px',
                   fontSize: '0.75rem',
                   fontWeight: '700',
-                  color: '#000000',
+                  color: '#1f2937',
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
-                  flexShrink: 0
+                  flexShrink: 0,
+                  border: selectedGroup.group.your_role === 'admin' 
+                    ? '1px solid rgba(251, 191, 36, 0.4)'
+                    : '1px solid rgba(59, 130, 246, 0.4)',
+                  boxShadow: '0 1px 4px rgba(0, 0, 0, 0.08)'
                 }}>
                   {selectedGroup.group.your_role}
                 </div>
@@ -676,29 +698,31 @@ function Groups({ onViewGroupPlaces, onClose }) {
             <button 
               onClick={() => handleViewPlaces(selectedGroup.group.group_id)}
                   style={{
-                    padding: '8px 16px',
-                    background: '#6366f1',
+                    padding: '8px 20px',
+                    background: 'rgba(99, 102, 241, 0.9)',
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
                     color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
+                    border: '1px solid rgba(99, 102, 241, 0.6)',
+                    borderRadius: '24px',
                     fontSize: '0.8125rem',
                     fontWeight: '600',
                     cursor: 'pointer',
-                    transition: 'all 0.15s',
+                    transition: 'all 0.2s ease',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
-                    boxShadow: '0 2px 4px rgba(99, 102, 241, 0.2)'
+                    boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)'
                   }}
                   onMouseEnter={(e) => {
-                    e.target.style.background = '#4f46e5';
-                    e.target.style.transform = 'translateY(-1px)';
-                    e.target.style.boxShadow = '0 4px 8px rgba(99, 102, 241, 0.3)';
+                    e.target.style.background = 'rgba(79, 70, 229, 0.95)';
+                    e.target.style.transform = 'translateY(-2px)';
+                    e.target.style.boxShadow = '0 4px 12px rgba(99, 102, 241, 0.4)';
                   }}
                   onMouseLeave={(e) => {
-                    e.target.style.background = '#6366f1';
+                    e.target.style.background = 'rgba(99, 102, 241, 0.9)';
                     e.target.style.transform = 'translateY(0)';
-                    e.target.style.boxShadow = '0 2px 4px rgba(99, 102, 241, 0.2)';
+                    e.target.style.boxShadow = '0 2px 8px rgba(99, 102, 241, 0.3)';
                   }}
                 >
                   <span>📍</span>
@@ -707,14 +731,16 @@ function Groups({ onViewGroupPlaces, onClose }) {
           </div>
             </div>
 
-            {/* Members Section - Modern Design */}
+            {/* Members Section - Glass Design */}
             <div style={{
-              background: 'white',
-              padding: '20px',
-              borderRadius: '12px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)',
-              border: '1px solid #e5e7eb',
-              marginBottom: '16px'
+              background: 'rgba(255, 255, 255, 0.85)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
+              padding: '24px',
+              borderRadius: '16px',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)',
+              border: '1px solid rgba(255, 255, 255, 0.5)',
+              marginBottom: '20px'
             }}>
               <h4 style={{
                 margin: '0 0 16px 0',
@@ -725,13 +751,16 @@ function Groups({ onViewGroupPlaces, onClose }) {
                 Members ({selectedGroup.members.length})
               </h4>
 
-              {/* Info Tip - Compact Modern Design */}
+              {/* Info Tip - Glass Design */}
               <div style={{
-                padding: '12px 16px',
-                background: '#eff6ff',
-                borderRadius: '10px',
-                marginBottom: '16px',
-                border: '1px solid #bfdbfe'
+                padding: '16px',
+                background: 'rgba(239, 246, 255, 0.6)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                borderRadius: '12px',
+                marginBottom: '20px',
+                border: '1px solid rgba(191, 219, 254, 0.4)',
+                boxShadow: '0 2px 8px rgba(59, 130, 246, 0.1)'
               }}>
                 <div style={{
                   display: 'flex',
@@ -777,11 +806,14 @@ function Groups({ onViewGroupPlaces, onClose }) {
               {/* Add Member Form (Admin only) */}
             {selectedGroup.group.your_role === 'admin' && (
                 <form onSubmit={handleAddMember} style={{
-                  padding: '16px',
-                  background: '#f9fafb',
+                  padding: '20px',
+                  background: 'rgba(255, 255, 255, 0.4)',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
                   borderRadius: '12px',
-                  marginBottom: '20px',
-                  border: '2px solid #e5e7eb'
+                  marginBottom: '24px',
+                  border: '1px solid rgba(255, 255, 255, 0.4)',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)'
                 }}>
                   <label style={{
                     display: 'block',
@@ -850,8 +882,8 @@ function Groups({ onViewGroupPlaces, onClose }) {
               </form>
             )}
 
-              {/* Members List - Modern Compact Design */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {/* Members List - Glass Card Design */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {selectedGroup.members.map(member => (
                   <div
                     key={member.user_id}
@@ -859,22 +891,26 @@ function Groups({ onViewGroupPlaces, onClose }) {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      padding: '12px',
-                      background: '#ffffff',
-                      borderRadius: '10px',
-                      border: '1px solid #e5e7eb',
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                      transition: 'all 0.15s'
+                      padding: '14px',
+                      background: 'rgba(255, 255, 255, 0.7)',
+                      backdropFilter: 'blur(8px)',
+                      WebkitBackdropFilter: 'blur(8px)',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(255, 255, 255, 0.5)',
+                      boxShadow: '0 1px 4px rgba(0, 0, 0, 0.06)',
+                      transition: 'all 0.2s ease'
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = '#d1d5db';
-                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-                      e.currentTarget.style.transform = 'translateX(2px)';
+                      e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.3)';
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(31, 38, 135, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08)';
+                      e.currentTarget.style.transform = 'translateX(4px)';
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.85)';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = '#e5e7eb';
-                      e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)';
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.5)';
+                      e.currentTarget.style.boxShadow = '0 1px 4px rgba(0, 0, 0, 0.06)';
                       e.currentTarget.style.transform = 'translateX(0)';
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.7)';
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
@@ -983,7 +1019,13 @@ function Groups({ onViewGroupPlaces, onClose }) {
               <div style={{
                 textAlign: 'center',
                 padding: '60px 20px',
-                color: '#64748b'
+                color: '#64748b',
+                background: 'rgba(255, 255, 255, 0.4)',
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
+                borderRadius: '20px',
+                border: '1px solid rgba(255, 255, 255, 0.4)',
+                boxShadow: '0 4px 16px rgba(31, 38, 135, 0.1)'
               }}>
                 <div style={{
                   fontSize: '3rem',
@@ -1002,7 +1044,13 @@ function Groups({ onViewGroupPlaces, onClose }) {
                 textAlign: 'center',
                 padding: '60px 20px',
                 maxWidth: '500px',
-                margin: '0 auto'
+                margin: '0 auto',
+                background: 'rgba(255, 255, 255, 0.4)',
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
+                borderRadius: '20px',
+                border: '1px solid rgba(255, 255, 255, 0.4)',
+                boxShadow: '0 4px 16px rgba(31, 38, 135, 0.1)'
               }}>
                 <div style={{
                   fontSize: '5rem',
@@ -1055,36 +1103,41 @@ function Groups({ onViewGroupPlaces, onClose }) {
                 </button>
               </div>
             ) : (
-              /* Groups List - Clean List Design */
+              /* Groups List - Glass Card Design */
               <div style={{
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '0',
+                gap: '16px',
                 paddingBottom: '8px'
               }}>
                 {groups.map(group => (
                   <div
                     key={group.group_id}
                     style={{
-                      background: 'white',
-                      padding: '18px',
-                      borderRadius: '12px',
-                      border: '1px solid #e5e7eb',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)',
-                      transition: 'all 0.2s ease',
+                      /* Glass Card Effect - More Opaque for Better Readability */
+                      background: 'rgba(255, 255, 255, 0.85)',
+                      backdropFilter: 'blur(10px)',
+                      WebkitBackdropFilter: 'blur(10px)',
+                      padding: '20px',
+                      borderRadius: '16px',
+                      border: '1px solid rgba(255, 255, 255, 0.5)',
+                      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)',
+                      transition: 'all 0.3s ease',
                       cursor: 'pointer',
                       display: 'flex',
                       flexDirection: 'column'
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-                      e.currentTarget.style.borderColor = '#6366f1';
+                      e.currentTarget.style.transform = 'translateY(-4px)';
+                      e.currentTarget.style.boxShadow = '0 8px 24px rgba(31, 38, 135, 0.15), 0 4px 12px rgba(0, 0, 0, 0.1)';
+                      e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.5)';
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.95)';
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)';
-                      e.currentTarget.style.borderColor = '#e5e7eb';
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)';
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.5)';
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.85)';
                     }}
                   >
                     {/* Group Header */}
@@ -1092,35 +1145,43 @@ function Groups({ onViewGroupPlaces, onClose }) {
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'flex-start',
-                      marginBottom: '12px',
+                      marginBottom: '10px',
                       gap: '10px'
                     }}>
                       <h4 style={{
                         margin: 0,
-                        fontSize: '1.125rem',
+                        fontSize: '16px',
                         fontWeight: '700',
-                        color: '#111827',
+                        color: '#1f2937',
                         flex: 1,
                         lineHeight: '1.4',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
+                        whiteSpace: 'nowrap',
+                        letterSpacing: '-0.1px'
                       }}>
                         {group.name}
                       </h4>
                       <span style={{
                         padding: '4px 10px',
                         background: group.your_role === 'admin'
-                          ? '#fef3c7'
-                          : '#e0f2fe',
-                        color: '#000000',
-                        borderRadius: '6px',
-                        fontSize: '0.6875rem',
+                          ? 'rgba(254, 243, 199, 0.8)'
+                          : 'rgba(224, 242, 254, 0.8)',
+                        backdropFilter: 'blur(6px)',
+                        WebkitBackdropFilter: 'blur(6px)',
+                        color: '#1f2937',
+                        borderRadius: '10px',
+                        fontSize: '11px',
                         fontWeight: '700',
                         textTransform: 'uppercase',
                         letterSpacing: '0.5px',
                         whiteSpace: 'nowrap',
-                        flexShrink: 0
+                        flexShrink: 0,
+                        border: group.your_role === 'admin'
+                          ? '1px solid rgba(251, 191, 36, 0.4)'
+                          : '1px solid rgba(59, 130, 246, 0.4)',
+                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.06)',
+                        lineHeight: '1.2'
                       }}>
                         {group.your_role}
                       </span>
@@ -1147,22 +1208,89 @@ function Groups({ onViewGroupPlaces, onClose }) {
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      paddingTop: '14px',
-                      borderTop: '1px solid #f3f4f6',
+                      paddingTop: '12px',
+                      borderTop: '1px solid rgba(243, 244, 246, 0.6)',
                       marginTop: 'auto' // Push to bottom
                     }}>
                       <div style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '6px',
-                        fontSize: '0.75rem',
-                        fontWeight: '600',
-                        color: '#374151'
+                        gap: '8px'
                       }}>
-                        <span>👥</span>
-                  <span>{group.member_count} member{group.member_count !== 1 ? 's' : ''}</span>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          fontSize: '13px',
+                          fontWeight: '500',
+                          color: '#6b7280'
+                        }}>
+                          <span style={{ fontSize: '12px' }}>👥</span>
+                          <span>{group.member_count} member{group.member_count !== 1 ? 's' : ''}</span>
+                        </div>
+                        {/* User Profile Avatars */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '-4px',
+                          marginLeft: '4px'
+                        }}>
+                          {Array.from({ length: Math.min(group.member_count, 4) }).map((_, index) => (
+                            <div
+                              key={index}
+                              style={{
+                                width: '24px',
+                                height: '24px',
+                                borderRadius: '50%',
+                                background: `linear-gradient(135deg, ${
+                                  ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b'][index % 4]
+                                }, ${
+                                  ['#4f46e5', '#7c3aed', '#db2777', '#d97706'][index % 4]
+                                })`,
+                                border: '2px solid rgba(255, 255, 255, 0.9)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '10px',
+                                fontWeight: '600',
+                                color: 'white',
+                                marginLeft: index > 0 ? '-6px' : '0',
+                                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.15)',
+                                zIndex: 4 - index
+                              }}
+                              title={`Member ${index + 1}`}
+                            >
+                              {String.fromCharCode(65 + (index % 26))}
+                            </div>
+                          ))}
+                          {group.member_count > 4 && (
+                            <div
+                              style={{
+                                width: '24px',
+                                height: '24px',
+                                borderRadius: '50%',
+                                background: 'rgba(107, 114, 128, 0.2)',
+                                backdropFilter: 'blur(4px)',
+                                WebkitBackdropFilter: 'blur(4px)',
+                                border: '2px solid rgba(255, 255, 255, 0.9)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '9px',
+                                fontWeight: '600',
+                                color: '#6b7280',
+                                marginLeft: '-6px',
+                                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.15)',
+                                zIndex: 0
+                              }}
+                              title={`+${group.member_count - 4} more`}
+                            >
+                              +{group.member_count - 4}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
@@ -1170,22 +1298,34 @@ function Groups({ onViewGroupPlaces, onClose }) {
                       }}
                           style={{
                             padding: '6px 14px',
-                            background: '#ffffff',
-                            color: '#374151',
-                            border: '1px solid #d1d5db',
-                            borderRadius: '8px',
-                            fontSize: '0.75rem',
+                            height: '32px',
+                            background: 'rgba(99, 102, 241, 0.1)',
+                            backdropFilter: 'blur(6px)',
+                            WebkitBackdropFilter: 'blur(6px)',
+                            color: '#6366f1',
+                            border: '1px solid rgba(99, 102, 241, 0.3)',
+                            borderRadius: '20px',
+                            fontSize: '13px',
                             fontWeight: '600',
                             cursor: 'pointer',
-                            transition: 'all 0.15s'
+                            transition: 'all 0.2s ease',
+                            boxShadow: '0 1px 3px rgba(99, 102, 241, 0.12)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            whiteSpace: 'nowrap'
                           }}
                           onMouseEnter={(e) => {
-                            e.target.style.background = '#f9fafb';
-                            e.target.style.borderColor = '#9ca3af';
+                            e.target.style.background = 'rgba(99, 102, 241, 0.15)';
+                            e.target.style.borderColor = 'rgba(99, 102, 241, 0.4)';
+                            e.target.style.transform = 'translateY(-1px)';
+                            e.target.style.boxShadow = '0 2px 6px rgba(99, 102, 241, 0.2)';
                           }}
                           onMouseLeave={(e) => {
-                            e.target.style.background = '#ffffff';
-                            e.target.style.borderColor = '#d1d5db';
+                            e.target.style.background = 'rgba(99, 102, 241, 0.1)';
+                            e.target.style.borderColor = 'rgba(99, 102, 241, 0.3)';
+                            e.target.style.transform = 'translateY(0)';
+                            e.target.style.boxShadow = '0 1px 3px rgba(99, 102, 241, 0.12)';
                           }}
                     >
                       Details
@@ -1196,26 +1336,33 @@ function Groups({ onViewGroupPlaces, onClose }) {
                         handleViewPlaces(group.group_id);
                       }}
                           style={{
-                            padding: '6px 14px',
-                            background: '#6366f1',
+                            padding: '6px 16px',
+                            height: '32px',
+                            background: 'rgba(99, 102, 241, 0.9)',
+                            backdropFilter: 'blur(8px)',
+                            WebkitBackdropFilter: 'blur(8px)',
                             color: 'white',
-                            border: 'none',
-                            borderRadius: '8px',
-                            fontSize: '0.75rem',
+                            border: '1px solid rgba(99, 102, 241, 0.6)',
+                            borderRadius: '20px',
+                            fontSize: '13px',
                             fontWeight: '600',
                             cursor: 'pointer',
-                            transition: 'all 0.15s',
-                            boxShadow: '0 1px 2px rgba(99, 102, 241, 0.2)'
+                            transition: 'all 0.2s ease',
+                            boxShadow: '0 2px 6px rgba(99, 102, 241, 0.3)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            whiteSpace: 'nowrap'
                           }}
                           onMouseEnter={(e) => {
-                            e.target.style.background = '#4f46e5';
+                            e.target.style.background = 'rgba(79, 70, 229, 0.95)';
                             e.target.style.transform = 'translateY(-1px)';
-                            e.target.style.boxShadow = '0 2px 4px rgba(99, 102, 241, 0.3)';
+                            e.target.style.boxShadow = '0 4px 10px rgba(99, 102, 241, 0.4)';
                           }}
                           onMouseLeave={(e) => {
-                            e.target.style.background = '#6366f1';
+                            e.target.style.background = 'rgba(99, 102, 241, 0.9)';
                             e.target.style.transform = 'translateY(0)';
-                            e.target.style.boxShadow = '0 1px 2px rgba(99, 102, 241, 0.2)';
+                            e.target.style.boxShadow = '0 2px 6px rgba(99, 102, 241, 0.3)';
                           }}
                         >
                           Places

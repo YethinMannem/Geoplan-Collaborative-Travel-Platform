@@ -43,3 +43,4 @@ Replace buttons with compact, visual status indicators:
 - Click to toggle
 - Tooltip on hover for clarity
 
+

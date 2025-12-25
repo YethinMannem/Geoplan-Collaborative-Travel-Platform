@@ -1,33 +1,37 @@
 .place-list-icons {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .list-icon-btn {
-  width: 32px;
-  height: 32px;
-  border: 2px solid #e2e8f0;
-  border-radius: 10px;
-  background: #ffffff;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 18px; /* Fully rounded pill shape */
+  /* Glassmorphism Effect */
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  font-size: 1rem;
+  font-size: 1.125rem;
   padding: 0;
   position: relative;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  box-shadow: 0 2px 8px rgba(31, 38, 135, 0.1);
 }
 
 .list-icon-btn:hover:not(:disabled) {
-  transform: translateY(-2px) scale(1.05);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  border-color: #cbd5e1;
+  transform: translateY(-2px) scale(1.1);
+  box-shadow: 0 4px 16px rgba(31, 38, 135, 0.2);
+  border-color: rgba(99, 102, 241, 0.5);
+  background: rgba(255, 255, 255, 0.8);
 }
 
 .list-icon-btn:active:not(:disabled) {
@@ -51,14 +55,16 @@
 }
 
 .visited-icon.active {
-  background: linear-gradient(135deg, #dbeafe, #bfdbfe);
-  border-color: #3b82f6;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25);
+  background: rgba(59, 130, 246, 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-color: rgba(59, 130, 246, 0.6);
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
 }
 
 .visited-icon.active:hover:not(:disabled) {
-  background: linear-gradient(135deg, #bfdbfe, #93c5fd);
-  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.4);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
 }
 
 .visited-icon .icon-filled {
@@ -82,14 +88,16 @@
 }
 
 .wishlist-icon.active {
-  background: linear-gradient(135deg, #fef3c7, #fde68a);
-  border-color: #f59e0b;
-  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.25);
+  background: rgba(245, 158, 11, 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-color: rgba(245, 158, 11, 0.6);
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.3);
 }
 
 .wishlist-icon.active:hover:not(:disabled) {
-  background: linear-gradient(135deg, #fde68a, #fcd34d);
-  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
 }
 
 .wishlist-icon .icon-filled {
@@ -113,14 +121,16 @@
 }
 
 .liked-icon.active {
-  background: linear-gradient(135deg, #fce7f3, #fbcfe8);
-  border-color: #ec4899;
-  box-shadow: 0 2px 8px rgba(236, 72, 153, 0.25);
+  background: rgba(236, 72, 153, 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-color: rgba(236, 72, 153, 0.6);
+  box-shadow: 0 4px 16px rgba(236, 72, 153, 0.3);
 }
 
 .liked-icon.active:hover:not(:disabled) {
-  background: linear-gradient(135deg, #fbcfe8, #f9a8d4);
-  box-shadow: 0 4px 16px rgba(236, 72, 153, 0.35);
+  background: rgba(236, 72, 153, 0.4);
+  box-shadow: 0 6px 20px rgba(236, 72, 153, 0.4);
 }
 
 .liked-icon .icon-filled {

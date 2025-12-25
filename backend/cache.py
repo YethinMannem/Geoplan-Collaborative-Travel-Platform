@@ -127,3 +127,4 @@ def clear_all_cache():
     except redis.RedisError as e:
         print(f"Cache clear error: {e}")
 
+

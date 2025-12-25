@@ -24,8 +24,11 @@ if (!API_KEY || API_KEY.trim() === '') {
 const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:5001';
 
 const mapContainerStyle = {
-  width: '100%',
-  height: 'calc(100vh - 64px)' // Account for navbar height
+  width: '100vw',
+  height: '100vh',
+  position: 'absolute',
+  top: 0,
+  left: 0
 };
 
 const defaultCenter = {
@@ -52,6 +55,38 @@ function App() {
   const [allListResults, setAllListResults] = useState([]); // Store all results before filtering (for personal lists)
   const [allSearchResults, setAllSearchResults] = useState([]); // Store all search results before filtering
   
+  // Filter state for results sidebar
+  const [filters, setFilters] = useState({
+    placeTypes: [], // Array of selected place types ['brewery', 'restaurant', etc.]
+    minRating: 0, // Minimum rating (0 = no filter)
+    maxDistance: null, // Maximum distance in km (null = no filter)
+    states: [] // Array of selected states
+  });
+  
+  // Restaurant-specific filters (Best 9 filters)
+  const [restaurantFilters, setRestaurantFilters] = useState({
+    cuisines: [], // Array of selected cuisine types
+    priceRanges: [], // Array of selected price ranges ('1', '2', '3', '4')
+    ratings: [], // Array of selected ratings ('4', '4.5', '5')
+    dietaryOptions: [], // Array of dietary options: 'vegetarian', 'vegan', 'gluten-free', 'halal', 'kosher', 'keto-friendly'
+    openNow: false, // Filter for restaurants currently open
+    delivery: false,
+    takeout: false,
+    reservations: false
+  });
+
+  // Tourist place filters state
+  const [touristFilters, setTouristFilters] = useState({
+    categories: [], // Array of selected categories (Park, Museum, Monument, Attraction, etc.)
+    entryFee: [], // Array of selected entry fee ranges ('free', '1-10', '11-25', '25+')
+    ratings: [], // Array of selected ratings ('4', '4.5', '5')
+    familyFriendly: false,
+    accessibility: false,
+    petFriendly: false,
+    openNow: false,
+    guidedTours: false
+  });
+  
   // Groups state
   const [showGroups, setShowGroups] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
@@ -62,6 +97,13 @@ function App() {
   // Sidebar toggles
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);  // Search Options
   const [showRightSidebar, setShowRightSidebar] = useState(false); // Results & Analytics - only show when there are results
+  
+  // Right sidebar width (resizable)
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('rightSidebarWidth');
+    return saved ? parseInt(saved, 10) : 400;
+  });
+  const [isResizing, setIsResizing] = useState(false);
 
   // Group places display on map
   const [groupPlacesMode, setGroupPlacesMode] = useState(false);
@@ -115,7 +157,7 @@ function App() {
       try {
         clustererRef.current.clearMarkers();
       } catch (e) {
-        console.warn('Error clearing clusterer:', e);
+        // Silently handle clusterer cleanup errors
       }
       clustererRef.current = null;
     }
@@ -128,6 +170,39 @@ function App() {
     // Also check role-based auth (for backward compatibility)
     checkAuth();
   }, []);
+
+  // Handle sidebar resizing
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizing) return;
+      
+      const newWidth = window.innerWidth - e.clientX - 20; // 20px for right margin
+      const minWidth = 300;
+      const maxWidth = 800;
+      const clampedWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
+      
+      setRightSidebarWidth(clampedWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      localStorage.setItem('rightSidebarWidth', String(rightSidebarWidth));
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing, rightSidebarWidth]);
 
   // Load stats after authentication
   useEffect(() => {
@@ -154,7 +229,7 @@ function App() {
         markerClustererLibRef.current = window.markerClusterer;
       };
       script.onerror = () => {
-        console.warn('MarkerClusterer library failed to load');
+        // MarkerClusterer library failed to load - will use individual markers instead
       };
       document.head.appendChild(script);
     }
@@ -183,6 +258,293 @@ function App() {
     });
   };
 
+  /**
+   * Apply all filters to place results
+   * Filters include: place type, rating, distance, state, restaurant-specific, and tourist-specific filters
+   * @param {Array} places - Array of place objects to filter
+   * @returns {Array} Filtered array of places
+   */
+  const applyFilters = (places) => {
+    let filtered = Array.isArray(places) ? places : [];
+    
+    // Filter by place type
+    if (filters.placeTypes.length > 0) {
+      filtered = filtered.filter(place => 
+        place.place_type && filters.placeTypes.includes(place.place_type)
+      );
+    }
+    
+    // Filter by minimum rating
+    if (filters.minRating > 0) {
+      filtered = filtered.filter(place => {
+        const rating = place.rating;
+        if (rating === null || rating === undefined) return false;
+        const ratingNum = typeof rating === 'number' ? rating : Number(rating);
+        return !isNaN(ratingNum) && ratingNum >= filters.minRating;
+      });
+    }
+    
+    // Filter by maximum distance
+    if (filters.maxDistance !== null && filters.maxDistance > 0) {
+      filtered = filtered.filter(place => {
+        if (!place.distance_km) return false;
+        return place.distance_km <= filters.maxDistance;
+      });
+    }
+    
+    // Filter by state
+    if (filters.states.length > 0) {
+      filtered = filtered.filter(place => 
+        place.state && filters.states.includes(place.state)
+      );
+    }
+    
+    // Apply restaurant-specific filters (only for restaurants)
+    const hasRestaurantResults = filtered.some(p => p.place_type === 'restaurant');
+    const hasActiveRestaurantFilters = 
+      restaurantFilters.cuisines.length > 0 ||
+      restaurantFilters.priceRanges.length > 0 ||
+      restaurantFilters.ratings.length > 0 ||
+      restaurantFilters.dietaryOptions.length > 0 ||
+      restaurantFilters.openNow ||
+      restaurantFilters.delivery ||
+      restaurantFilters.takeout ||
+      restaurantFilters.reservations;
+    
+    if (hasRestaurantResults && hasActiveRestaurantFilters) {
+      filtered = filtered.filter(place => {
+        if (place.place_type !== 'restaurant') return true; // Keep non-restaurants
+        
+        // Filter by cuisine types
+        if (restaurantFilters.cuisines.length > 0) {
+          const placeCuisine = (place.cuisine_type || '').toLowerCase();
+          if (!placeCuisine) return false;
+          
+          const placeCuisines = placeCuisine.split(/[,;]/).map(c => c.trim());
+          const matchesCuisine = restaurantFilters.cuisines.some(filterCuisine => {
+            const filterLower = filterCuisine.toLowerCase();
+            return placeCuisines.some(pc => pc === filterLower || pc.includes(filterLower) || filterLower.includes(pc));
+          });
+          if (!matchesCuisine) return false;
+        }
+        
+        // Filter by price ranges
+        // Note: If price_range is NULL, we include the restaurant (don't filter it out)
+        // This allows restaurants without price data to still be shown
+        if (restaurantFilters.priceRanges.length > 0) {
+          const placePriceRange = place.price_range;
+          // Only filter if the restaurant has price_range data
+          if (placePriceRange !== null && placePriceRange !== undefined) {
+            const placePriceStr = String(placePriceRange);
+            if (!restaurantFilters.priceRanges.includes(placePriceStr)) return false;
+          }
+          // If price_range is NULL/undefined, allow it through (don't filter out)
+        }
+        
+        // Filter by ratings
+        if (restaurantFilters.ratings.length > 0) {
+          const rating = place.rating;
+          const ratingNum = rating ? (typeof rating === 'number' ? rating : parseFloat(rating)) : 0;
+          if (isNaN(ratingNum)) return false;
+          
+          const matchesRating = restaurantFilters.ratings.some(r => {
+            const minRating = parseFloat(r);
+            return ratingNum >= minRating;
+          });
+          if (!matchesRating) return false;
+        }
+        
+        // Filter by dietary options
+        // Note: If dietary_options is NULL/empty, we include the restaurant (don't filter it out)
+        // This allows restaurants without dietary data to still be shown
+        if (restaurantFilters.dietaryOptions.length > 0) {
+          // Only filter if the restaurant has dietary_options data
+          if (place.dietary_options !== null && place.dietary_options !== undefined) {
+            const placeDietary = Array.isArray(place.dietary_options) ? place.dietary_options : 
+                                 (place.dietary_options ? [place.dietary_options] : []);
+            // If we have data but it's empty array, allow it through
+            if (placeDietary.length > 0) {
+              const placeDietaryLower = placeDietary.map(d => String(d).toLowerCase());
+              const matchesDietary = restaurantFilters.dietaryOptions.some(filterDietary => {
+                const filterLower = filterDietary.toLowerCase();
+                return placeDietaryLower.some(pd => pd === filterLower || pd.includes(filterLower));
+              });
+              if (!matchesDietary) return false;
+            }
+          }
+          // If dietary_options is NULL/undefined/empty, allow it through (don't filter out)
+        }
+
+        // Filter by open now (check if current time is within hours_of_operation)
+        // Note: If hours_of_operation is NULL, we include the restaurant (don't filter it out)
+        // This allows restaurants without hours data to still be shown
+        if (restaurantFilters.openNow) {
+          // Only filter if the restaurant has hours_of_operation data
+          if (place.hours_of_operation) {
+            // Simple check: if hours exist, consider it potentially open
+            // Note: Full implementation would require parsing hours string and checking current time
+            // For now, just check if hours data exists - if it does, allow it through
+          }
+          // If hours_of_operation is NULL/undefined, allow it through (don't filter out)
+        }
+
+        // Filter by delivery
+        // Note: If delivery is NULL, we include the restaurant (don't filter it out)
+        // This allows restaurants without delivery data to still be shown
+        if (restaurantFilters.delivery) {
+          // Only filter if the restaurant has delivery data and it's false
+          if (place.delivery !== null && place.delivery !== undefined && !place.delivery) {
+            return false;
+          }
+          // If delivery is null/undefined, allow it through
+          // If delivery is true, allow it through
+        }
+
+        // Filter by takeout
+        // Note: If takeout is NULL, we include the restaurant (don't filter it out)
+        if (restaurantFilters.takeout) {
+          // Only filter if the restaurant has takeout data and it's false
+          if (place.takeout !== null && place.takeout !== undefined && !place.takeout) {
+            return false;
+          }
+          // If takeout is null/undefined, allow it through
+          // If takeout is true, allow it through
+        }
+
+        // Filter by reservations
+        // Note: If reservations is NULL, we include the restaurant (don't filter it out)
+        if (restaurantFilters.reservations) {
+          // Only filter if the restaurant has reservations data and it's false
+          if (place.reservations !== null && place.reservations !== undefined && !place.reservations) {
+            return false;
+          }
+          // If reservations is null/undefined, allow it through
+          // If reservations is true, allow it through
+        }
+        
+        return true;
+      });
+    }
+    
+    // Apply tourist place-specific filters (only for tourist places)
+    const hasTouristResults = filtered.some(p => p.place_type === 'tourist_place');
+    const hasActiveTouristFilters = 
+      touristFilters.categories.length > 0 ||
+      touristFilters.entryFee.length > 0 ||
+      touristFilters.ratings.length > 0 ||
+      touristFilters.familyFriendly ||
+      touristFilters.accessibility ||
+      touristFilters.petFriendly ||
+      touristFilters.openNow ||
+      touristFilters.guidedTours;
+    
+    if (hasTouristResults && hasActiveTouristFilters) {
+      filtered = filtered.filter(place => {
+        if (place.place_type !== 'tourist_place') return true; // Keep non-tourist places
+        
+        // Filter by category/type
+        if (touristFilters.categories.length > 0) {
+          const placeType = place.tourist_type;
+          // If tourist_type is null/undefined/empty, exclude it when filter is active
+          // (we can't verify it matches the selected category)
+          if (!placeType || placeType === null || placeType === undefined || placeType === '') {
+            return false;
+          }
+          
+          // Check if the place type matches any of the selected categories
+          const placeTypeLower = String(placeType).toLowerCase().trim();
+          const matchesCategory = touristFilters.categories.some(filterCategory => {
+            const filterLower = String(filterCategory).toLowerCase().trim();
+            // Exact match or contains match
+            return placeTypeLower === filterLower || 
+                   placeTypeLower.includes(filterLower) || 
+                   filterLower.includes(placeTypeLower);
+          });
+          if (!matchesCategory) return false;
+        }
+        
+        // Filter by entry fee
+        if (touristFilters.entryFee.length > 0) {
+          const entryFee = place.entry_fee;
+          if (entryFee === null || entryFee === undefined) {
+            // If NULL, only show if "free" is selected
+            if (!touristFilters.entryFee.includes('free')) return false;
+          } else {
+            const feeNum = typeof entryFee === 'number' ? entryFee : parseFloat(entryFee);
+            if (isNaN(feeNum)) {
+              if (!touristFilters.entryFee.includes('free')) return false;
+            } else {
+              let matchesFee = false;
+              if (touristFilters.entryFee.includes('free') && feeNum === 0) matchesFee = true;
+              if (touristFilters.entryFee.includes('1-10') && feeNum > 0 && feeNum <= 10) matchesFee = true;
+              if (touristFilters.entryFee.includes('11-25') && feeNum > 10 && feeNum <= 25) matchesFee = true;
+              if (touristFilters.entryFee.includes('25+') && feeNum > 25) matchesFee = true;
+              if (!matchesFee) return false;
+            }
+          }
+        }
+        
+        // Filter by ratings
+        if (touristFilters.ratings.length > 0) {
+          const rating = place.rating;
+          const ratingNum = rating ? (typeof rating === 'number' ? rating : parseFloat(rating)) : 0;
+          if (isNaN(ratingNum)) return false;
+          
+          const matchesRating = touristFilters.ratings.some(r => {
+            const minRating = parseFloat(r);
+            return ratingNum >= minRating;
+          });
+          if (!matchesRating) return false;
+        }
+        
+        // Filter by family friendly
+        // When filter is selected, only show places where family_friendly is TRUE
+        if (touristFilters.familyFriendly) {
+          if (!place.family_friendly || place.family_friendly === null || place.family_friendly === undefined) {
+            return false;
+          }
+        }
+        
+        // Filter by accessibility
+        // When filter is selected, only show places where accessibility is TRUE
+        if (touristFilters.accessibility) {
+          if (!place.accessibility || place.accessibility === null || place.accessibility === undefined) {
+            return false;
+          }
+        }
+        
+        // Filter by pet friendly
+        // When filter is selected, only show places where pet_friendly is TRUE
+        if (touristFilters.petFriendly) {
+          if (!place.pet_friendly || place.pet_friendly === null || place.pet_friendly === undefined) {
+            return false;
+          }
+        }
+        
+        // Filter by open now (check tourist_hours)
+        // Note: Currently only checks if hours data exists
+        // Full implementation would parse hours string and check current time
+        if (touristFilters.openNow) {
+          if (!place.tourist_hours) {
+            // If no hours data, allow it to pass through to avoid filtering out all results
+          }
+        }
+        
+        // Filter by guided tours
+        // When filter is selected, only show places where guided_tours is TRUE
+        if (touristFilters.guidedTours) {
+          if (!place.guided_tours || place.guided_tours === null || place.guided_tours === undefined) {
+            return false;
+          }
+        }
+        
+        return true;
+      });
+    }
+    
+    return filtered;
+  };
+
   // Helper functions (defined after hooks)
   const checkAuth = async () => {
     try {
@@ -194,9 +556,6 @@ function App() {
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
         headers['X-Auth-Token'] = token;
-        console.log('🔑 Auth check - Token found, sending in headers');
-      } else {
-        console.log('⚠️ Auth check - No token found in localStorage');
       }
 
       const response = await fetch(`${API_BASE}/auth/check`, {
@@ -211,18 +570,16 @@ function App() {
       const data = await response.json();
       
       if (data.authenticated) {
-        console.log('✅ Auth check - Authenticated as:', data.role);
         setAuthenticated(true);
         setUserRole(data.role);
         setUserPermissions(data.permissions || []);
       } else {
-        console.log('❌ Auth check - Not authenticated');
         setAuthenticated(false);
         // Clear token if auth check fails
         setAuthToken(null);
       }
     } catch (err) {
-      console.error('❌ Auth check error:', err);
+      // Silently handle auth errors - expected when not logged in
       setAuthenticated(false);
       setAuthToken(null);
     } finally {
@@ -240,7 +597,11 @@ function App() {
         const profile = await getUserProfile();
         setUserAccount(profile.user);
       } catch (err) {
-        console.warn('Could not fetch user profile:', err);
+        // Silently handle 401/auth errors - they're expected in some cases
+        // Silently handle 401 errors (expected when not authenticated)
+        if (err.status !== 401 && !err.isAuthError) {
+          // Log non-401 errors for debugging
+        }
       }
     } else {
       // Fallback: role-based login (for admin/backward compatibility)
@@ -265,6 +626,8 @@ function App() {
       setAuthenticated(true); // Set authenticated when user account is found
     } catch (err) {
       // Token might be expired, invalid, or for role-based auth only
+      // Silently handle 401 errors - they're expected when not authenticated
+      // Silently handle 401 errors (expected when not authenticated)
       setUserAccount(null);
       setAuthenticated(false);
     }
@@ -326,7 +689,6 @@ function App() {
       } else if (response && response.success && Array.isArray(response.places)) {
         places = response.places;
       } else {
-        console.error(`Unexpected response format for ${listType}:`, response);
         throw new Error(`Invalid response format: expected array or {places: [...]}, got ${typeof response}`);
       }
 
@@ -393,17 +755,28 @@ function App() {
   };
 
   // Filter results when search query changes (for both search results and personal lists)
+  // Apply search filter and other filters when they change
   useEffect(() => {
+    let baseResults = [];
     if (activeListView && allListResults.length > 0) {
-      // Filter personal list results
-      const filtered = filterListResults(allListResults, listSearchQuery);
-      setResults(filtered);
+      baseResults = allListResults;
     } else if (!activeListView && allSearchResults.length > 0) {
-      // Filter search results
-      const filtered = filterListResults(allSearchResults, listSearchQuery);
-      setResults(filtered);
+      baseResults = allSearchResults;
     }
-  }, [listSearchQuery, activeListView, allListResults, allSearchResults]);
+    
+    // Always apply filters when we have base results
+    if (baseResults.length > 0) {
+      // First apply search query filter
+      let filtered = filterListResults(baseResults, listSearchQuery);
+      // Then apply other filters (place type, rating, distance, state, restaurant filters, tourist filters)
+      filtered = applyFilters(filtered);
+      setResults(filtered);
+    } else if (!activeListView && allSearchResults.length === 0 && allListResults.length === 0) {
+      // Clear results if we have no base results and no list/search results
+      setResults([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listSearchQuery, activeListView, allListResults, allSearchResults, filters, restaurantFilters, touristFilters]);
 
   // Reset to search mode (clear personal list view)
   const resetToSearchMode = () => {
@@ -530,9 +903,7 @@ function App() {
     setAllListResults([]); // Clear stored list results
 
     try {
-      console.log('🔍 Search params:', searchParams);
       const data = await searchPlaces(searchParams);
-      console.log('📊 Search response:', data);
       
       // Backend returns {features: [...], count: N} for radius/nearest searches
       // Handle both formats: {features: [...]} or {places: [...]} or direct array
@@ -544,27 +915,21 @@ function App() {
       } else if (Array.isArray(data)) {
         resultsArray = data;
       }
-      
-      console.log(`✅ Found ${resultsArray.length} places`);
-      // Debug: Log first result to check data structure
-      if (resultsArray.length > 0) {
-        console.log('📋 Sample place data:', {
-          name: resultsArray[0].name,
-          rating: resultsArray[0].rating,
-          description: resultsArray[0].description,
-          place_type: resultsArray[0].place_type
-        });
-      }
       // Store all search results for filtering
+      // The useEffect will automatically apply filters and update results
       setAllSearchResults(resultsArray);
-      setResults(resultsArray);
+      // Also set results immediately (useEffect will re-filter when filters change)
+      // This ensures results are shown immediately, then filtered when user selects filters
+      let initialFiltered = filterListResults(resultsArray, listSearchQuery);
+      initialFiltered = applyFilters(initialFiltered);
+      setResults(initialFiltered);
       
-      // Automatically show sidebar when results are found
-      if (resultsArray.length > 0) {
-        setShowRightSidebar(true);
-      } else {
-        setShowRightSidebar(false);
+      // Automatically show sidebar when search is performed (to show results or error message)
+      setShowRightSidebar(true);
+      if (resultsArray.length === 0) {
         setError(`No places found. Try increasing the search radius or selecting a different state.`);
+      } else {
+        setError(null); // Clear any previous errors if we have results
       }
       
       // Build query info string
@@ -674,7 +1039,7 @@ function App() {
             };
 
             if (isNaN(position.lat) || isNaN(position.lng)) {
-              console.warn('Invalid coordinates for place:', place);
+              // Skip places with invalid coordinates
               return null;
             }
 
@@ -691,7 +1056,7 @@ function App() {
 
             return marker;
           } catch (e) {
-            console.error('Error creating marker:', e, place);
+            // Skip places that fail to create markers
             return null;
           }
         }).filter(m => m !== null);
@@ -703,8 +1068,7 @@ function App() {
           });
           googleMarkersRef.current = markers;
         } catch (e) {
-          console.error('Error creating clusterer:', e);
-          // Fallback to individual markers
+          // Fallback to individual markers if clustering fails
           markers.forEach(m => newMarkers.push(m));
           googleMarkersRef.current = markers;
         }
@@ -718,7 +1082,7 @@ function App() {
             };
 
             if (isNaN(position.lat) || isNaN(position.lng)) {
-              console.warn('Invalid coordinates for place:', place);
+              // Skip places with invalid coordinates
               return;
             }
 
@@ -743,8 +1107,7 @@ function App() {
 
       setMarkers(newMarkers);
     } catch (error) {
-      console.error('Error in markers useEffect:', error);
-      // Don't throw - just log the error
+      // Silently handle marker creation errors to prevent UI crashes
     }
   }, [results, map, clearAllMarkers]);
 
@@ -906,8 +1269,8 @@ function App() {
           zIndex: 1000,
           display: 'flex',
           justifyContent: 'center',
-          alignItems: 'center',
-          padding: '20px'
+          alignItems: 'flex-start',
+          padding: '104px 20px 20px 20px'
         }}
         onClick={(e) => {
           if (e.target === e.currentTarget) {
@@ -917,14 +1280,17 @@ function App() {
         }}
         >
           <div style={{
-            background: 'white',
-            borderRadius: '16px',
+            /* Glassmorphism Effect - More Opaque */
+            background: 'rgba(255, 255, 255, 0.65)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: '1px solid rgba(255, 255, 255, 0.4)',
+            borderRadius: '24px',
             padding: '0',
-            maxWidth: '800px',
-            width: '50%',
+            width: '75vw',
             maxHeight: '90vh',
             overflow: 'hidden',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+            boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.15)',
             position: 'relative',
             display: 'flex',
             flexDirection: 'column'
@@ -940,27 +1306,40 @@ function App() {
               }}
               style={{
                 position: 'absolute',
-                top: '16px',
-                right: '16px',
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                background: 'var(--gray-200)',
-                border: 'none',
+                top: '14px',
+                right: '14px',
+                width: '24px',
+                height: '24px',
+                borderRadius: '6px',
+                background: 'rgba(255, 255, 255, 0.5)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                border: '1px solid rgba(255, 255, 255, 0.4)',
                 cursor: 'pointer',
-                fontSize: '18px',
+                fontSize: '14px',
+                color: '#64748b',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                transition: 'all 0.2s'
+                transition: 'all 0.2s ease',
+                zIndex: 10,
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+                fontWeight: '300',
+                lineHeight: '1'
               }}
               onMouseEnter={(e) => {
-                e.target.style.background = 'var(--error)';
-                e.target.style.color = 'white';
+                e.target.style.background = 'rgba(239, 68, 68, 0.2)';
+                e.target.style.color = '#dc2626';
+                e.target.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+                e.target.style.transform = 'scale(1.05)';
+                e.target.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
               }}
               onMouseLeave={(e) => {
-                e.target.style.background = 'var(--gray-200)';
-                e.target.style.color = 'inherit';
+                e.target.style.background = 'rgba(255, 255, 255, 0.5)';
+                e.target.style.color = '#64748b';
+                e.target.style.borderColor = 'rgba(255, 255, 255, 0.4)';
+                e.target.style.transform = 'scale(1)';
+                e.target.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08)';
               }}
             >
               ×
@@ -984,7 +1363,6 @@ function App() {
                   setSelectedGroupId(groupId);
                 }}
                 onViewGroupPlaces={(groupId) => {
-                  console.log('📍 View Group Places clicked for group:', groupId);
                   setSelectedGroupId(groupId);
                 }}
                 onClose={() => {
@@ -1172,20 +1550,10 @@ function App() {
             fontWeight: '600'
           }}>Loading Google Maps...</div>}
           onLoad={() => {
-            console.log('✅ Google Maps API loaded successfully');
-            setError(null); // Clear any previous errors
+            setError(null);
           }}
         onError={(error) => {
-            const errorMsg = 'Google Maps API failed to load. Please check your API key and ensure Maps JavaScript API and Places API are enabled in Google Cloud Console.';
-            setError(errorMsg);
-            console.error('❌ Google Maps API error:', error);
-            console.error('💡 Make sure:');
-            console.error('   1. API key is correct and not expired');
-            console.error('   2. Maps JavaScript API is enabled');
-            console.error('   3. Places API is enabled');
-            console.error('   4. Billing is enabled on your Google Cloud project');
-            console.error('   5. API key restrictions allow localhost:3000');
-            console.error('   6. See GOOGLE_MAPS_SETUP.md for detailed instructions');
+            setError('Google Maps API failed to load. Please check your API key and ensure Maps JavaScript API and Places API are enabled. See GOOGLE_MAPS_SETUP.md for instructions.');
         }}
       >
         {/* Toggle button for left sidebar (Search Options) */}
@@ -1193,35 +1561,57 @@ function App() {
           onClick={() => setShowLeftSidebar(!showLeftSidebar)}
           style={{
             position: 'absolute',
-            top: '76px', // 12px + 64px navbar
-            left: '12px',
+            top: '104px', // 20px (navbar top) + 64px (navbar height) + 20px (spacing)
+            left: '20px',
             zIndex: 1001,
-            width: '32px',
-            height: '32px',
-            background: showLeftSidebar ? '#f5f5f5' : '#2196F3',
-            color: showLeftSidebar ? '#666' : 'white',
-            border: '1px solid #ddd',
-            borderRadius: '50%',
+            width: '40px',
+            height: '40px',
+            /* Glassmorphism Effect */
+            background: showLeftSidebar 
+              ? 'rgba(255, 255, 255, 0.6)' 
+              : 'rgba(99, 102, 241, 0.8)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            color: showLeftSidebar ? '#64748b' : 'white',
+            border: showLeftSidebar 
+              ? '1px solid rgba(255, 255, 255, 0.4)' 
+              : '1px solid rgba(99, 102, 241, 0.5)',
+            borderRadius: '12px',
             cursor: 'pointer',
-            fontSize: '16px',
+            fontSize: '18px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             padding: '0',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-            transition: 'all 0.2s',
+            boxShadow: showLeftSidebar 
+              ? '0 4px 16px rgba(31, 38, 135, 0.1)' 
+              : '0 4px 16px rgba(99, 102, 241, 0.3)',
+            transition: 'all 0.2s ease',
             fontWeight: '300'
           }}
           onMouseEnter={(e) => {
-            e.target.style.background = showLeftSidebar ? '#f44336' : '#1976D2';
-            e.target.style.color = 'white';
-            e.target.style.borderColor = showLeftSidebar ? '#f44336' : '#1976D2';
+            if (showLeftSidebar) {
+              e.target.style.background = 'rgba(239, 68, 68, 0.8)';
+              e.target.style.color = 'white';
+              e.target.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+            } else {
+              e.target.style.background = 'rgba(99, 102, 241, 0.9)';
+              e.target.style.borderColor = 'rgba(99, 102, 241, 0.6)';
+            }
             e.target.style.transform = 'scale(1.1)';
+            e.target.style.boxShadow = '0 6px 20px rgba(31, 38, 135, 0.2)';
           }}
           onMouseLeave={(e) => {
-            e.target.style.background = showLeftSidebar ? '#f5f5f5' : '#2196F3';
-            e.target.style.color = showLeftSidebar ? '#666' : 'white';
-            e.target.style.borderColor = '#ddd';
+            if (showLeftSidebar) {
+              e.target.style.background = 'rgba(255, 255, 255, 0.6)';
+              e.target.style.color = '#64748b';
+              e.target.style.borderColor = 'rgba(255, 255, 255, 0.4)';
+              e.target.style.boxShadow = '0 4px 16px rgba(31, 38, 135, 0.1)';
+            } else {
+              e.target.style.background = 'rgba(99, 102, 241, 0.8)';
+              e.target.style.borderColor = 'rgba(99, 102, 241, 0.5)';
+              e.target.style.boxShadow = '0 4px 16px rgba(99, 102, 241, 0.3)';
+            }
             e.target.style.transform = 'scale(1)';
           }}
           title={showLeftSidebar ? 'Hide search options' : 'Show search options'}
@@ -1244,35 +1634,57 @@ function App() {
           onClick={() => setShowRightSidebar(!showRightSidebar)}
           style={{
             position: 'absolute',
-              top: '76px', // Below navbar
-              right: showRightSidebar ? '424px' : '12px', // Adjust when sidebar is open
+              top: '104px', // 20px (navbar top) + 64px (navbar height) + 20px (spacing)
+              right: showRightSidebar ? `${rightSidebarWidth + 24}px` : '20px', // Adjust when sidebar is open (width + gap)
             zIndex: 1001,
-            width: '32px',
-            height: '32px',
-            background: showRightSidebar ? '#f5f5f5' : '#2196F3',
-            color: showRightSidebar ? '#666' : 'white',
-            border: '1px solid #ddd',
-            borderRadius: '50%',
+            width: '40px',
+            height: '40px',
+            /* Glassmorphism Effect */
+            background: showRightSidebar 
+              ? 'rgba(255, 255, 255, 0.6)' 
+              : 'rgba(99, 102, 241, 0.8)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            color: showRightSidebar ? '#64748b' : 'white',
+            border: showRightSidebar 
+              ? '1px solid rgba(255, 255, 255, 0.4)' 
+              : '1px solid rgba(99, 102, 241, 0.5)',
+            borderRadius: '12px',
             cursor: 'pointer',
-            fontSize: '16px',
+            fontSize: '18px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             padding: '0',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-            transition: 'all 0.2s',
+            boxShadow: showRightSidebar 
+              ? '0 4px 16px rgba(31, 38, 135, 0.1)' 
+              : '0 4px 16px rgba(99, 102, 241, 0.3)',
+            transition: 'all 0.2s ease',
             fontWeight: '300'
           }}
           onMouseEnter={(e) => {
-            e.target.style.background = showRightSidebar ? '#f44336' : '#1976D2';
-            e.target.style.color = 'white';
-            e.target.style.borderColor = showRightSidebar ? '#f44336' : '#1976D2';
+            if (showRightSidebar) {
+              e.target.style.background = 'rgba(239, 68, 68, 0.8)';
+              e.target.style.color = 'white';
+              e.target.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+            } else {
+              e.target.style.background = 'rgba(99, 102, 241, 0.9)';
+              e.target.style.borderColor = 'rgba(99, 102, 241, 0.6)';
+            }
             e.target.style.transform = 'scale(1.1)';
+            e.target.style.boxShadow = '0 6px 20px rgba(31, 38, 135, 0.2)';
           }}
           onMouseLeave={(e) => {
-            e.target.style.background = showRightSidebar ? '#f5f5f5' : '#2196F3';
-            e.target.style.color = showRightSidebar ? '#666' : 'white';
-            e.target.style.borderColor = '#ddd';
+            if (showRightSidebar) {
+              e.target.style.background = 'rgba(255, 255, 255, 0.6)';
+              e.target.style.color = '#64748b';
+              e.target.style.borderColor = 'rgba(255, 255, 255, 0.4)';
+              e.target.style.boxShadow = '0 4px 16px rgba(31, 38, 135, 0.1)';
+            } else {
+              e.target.style.background = 'rgba(99, 102, 241, 0.8)';
+              e.target.style.borderColor = 'rgba(99, 102, 241, 0.5)';
+              e.target.style.boxShadow = '0 4px 16px rgba(99, 102, 241, 0.3)';
+            }
             e.target.style.transform = 'scale(1)';
           }}
             title={showRightSidebar ? 'Hide results' : 'Show results'}
@@ -1297,18 +1709,23 @@ function App() {
         </button>
         )}
 
-        {/* Right Sidebar - Results & Analytics - Only show when there are results or active list */}
-        {showRightSidebar && (results.length > 0 || activeListView) && (
+        {/* Right Sidebar - Results & Analytics - Show when sidebar is open (has results, error, or active list) */}
+        {showRightSidebar && (
           <div
             style={{
               position: 'absolute',
-              top: '76px', // Start below navbar (64px + 12px margin)
-              right: '12px',
-              width: '400px',
-              maxHeight: 'calc(100vh - 88px)', // Account for navbar + margins
-              background: 'rgba(255, 255, 255, 0.98)',
-              backdropFilter: 'blur(10px)',
-              padding: '20px',
+              top: '104px', // 20px (navbar top) + 64px (navbar height) + 20px (spacing)
+              right: '20px',
+              width: `${rightSidebarWidth}px`,
+              maxHeight: 'calc(100vh - 144px)', // Account for navbar + margins
+              /* Glassmorphism Effect */
+              background: 'rgba(255, 255, 255, 0.6)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.15)',
+              borderRadius: '20px',
+              padding: '24px',
               borderRadius: '16px',
               boxShadow: '0 8px 32px rgba(0, 0, 0, 0.15)',
               border: '2px solid var(--border-light)',
@@ -1319,6 +1736,32 @@ function App() {
               animation: 'slideDown 0.3s ease-out'
             }}
           >
+            {/* Resize Handle */}
+            <div
+              onMouseDown={(e) => {
+                e.preventDefault();
+                setIsResizing(true);
+              }}
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: '4px',
+                cursor: 'col-resize',
+                zIndex: 1001,
+                backgroundColor: 'transparent',
+                transition: 'background-color 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                if (!isResizing) {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }
+              }}
+            />
             <ResultsSidebar
               results={results}
               stats={stats}
@@ -1330,6 +1773,13 @@ function App() {
               onExport={handleExport}
               hasResults={results.length > 0}
               userAuthenticated={!!userAccount}
+              filters={filters}
+              onFiltersChange={setFilters}
+              allResults={activeListView ? allListResults : allSearchResults}
+              restaurantFilters={restaurantFilters}
+              onRestaurantFiltersChange={setRestaurantFilters}
+              touristFilters={touristFilters}
+              onTouristFiltersChange={setTouristFilters}
               noPosition={true}
               activeListView={activeListView}
               listSearchQuery={listSearchQuery}

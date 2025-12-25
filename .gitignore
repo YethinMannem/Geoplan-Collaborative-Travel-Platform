@@ -44,7 +44,7 @@ htmlcov/
 
 # Node / React
 node_modules/
-package-lock.json
+# package-lock.json should be committed for dependency reproducibility
 frontend-react/build/
 frontend-react/.pnp
 frontend-react/.pnp.js

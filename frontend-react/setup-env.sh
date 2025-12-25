@@ -50,3 +50,4 @@ echo "   1. Stop the server (Ctrl+C)"
 echo "   2. Run: npm start"
 echo ""
 
+

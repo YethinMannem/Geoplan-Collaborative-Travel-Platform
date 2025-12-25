@@ -104,3 +104,4 @@ REACT_APP_API_BASE=http://localhost:5001
 
 **Never commit your `.env` file to Git!** It's already in `.gitignore`, but double-check before pushing to GitHub.
 
+

@@ -12,23 +12,32 @@
   overflow: hidden; /* Prevent container overflow */
 }
 
-/* Custom scrollbar styling */
+/* Custom scrollbar styling - Glassmorphism Theme */
 .groups-container ::-webkit-scrollbar {
-  width: 8px;
+  width: 5px; /* Thinner scrollbar */
 }
 
 .groups-container ::-webkit-scrollbar-track {
-  background: #f1f5f9;
-  border-radius: 4px;
+  background: rgba(243, 244, 246, 0.5); /* Light gray track */
+  border-radius: 10px;
+  margin: 4px 0;
 }
 
 .groups-container ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
+  background: rgba(99, 102, 241, 0.5); /* Brand purple thumb */
+  border-radius: 10px;
+  border: none;
+  transition: background 0.2s ease;
 }
 
 .groups-container ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: rgba(99, 102, 241, 0.7); /* Darker purple on hover */
+}
+
+/* Firefox scrollbar */
+.groups-container {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 102, 241, 0.5) rgba(243, 244, 246, 0.5);
 }
 
 .groups-header {

@@ -122,3 +122,4 @@
 - Places appear in groups automatically when added to personal lists
 - This creates a seamless collaborative experience
 
+
