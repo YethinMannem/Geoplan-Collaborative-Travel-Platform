@@ -82,3 +82,7 @@ Desktop.ini
 # Linux
 *~
 .directory
+
+# Backend runtime files
+backend/backend.pid
+backend/backend.log
