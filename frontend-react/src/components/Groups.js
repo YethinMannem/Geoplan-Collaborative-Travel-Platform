@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getUserGroups, createGroup, getGroupDetails, addGroupMember, removeGroupMember, getGroupPlaces } from '../services/userListsApi';
 import './Groups.css';
 
-function Groups({ onViewGroupPlaces, onClose }) {
+function Groups({ onViewGroupPlaces, onClose, initialGroupIdToShow }) {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -17,6 +17,14 @@ function Groups({ onViewGroupPlaces, onClose }) {
   useEffect(() => {
     loadGroups();
   }, []);
+
+  // Show group details if initialGroupIdToShow is provided
+  useEffect(() => {
+    if (initialGroupIdToShow && !selectedGroup) {
+      handleViewGroup(initialGroupIdToShow);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialGroupIdToShow]);
 
   // Auto-dismiss success messages
   useEffect(() => {
@@ -161,35 +169,23 @@ function Groups({ onViewGroupPlaces, onClose }) {
       borderRadius: '0',
       boxShadow: 'none'
     }}>
-      {/* Header - Integrated Glass Style */}
-      <div style={{ 
-        padding: '0 20px',
-        height: '52px',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.3)',
-        flexShrink: 0,
-        background: 'rgba(99, 102, 241, 0.1)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-        borderTopLeftRadius: '24px',
-        borderTopRightRadius: '24px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{
-            width: '20px',
-            height: '20px',
-            borderRadius: '6px',
-            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '14px',
-            flexShrink: 0
-          }}>
-            👥
-          </div>
+      {/* Header - Integrated Glass Style - Only show on groups list page */}
+      {!selectedGroup && (
+        <div style={{ 
+          padding: '12px 20px',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.3)',
+          flexShrink: 0,
+          background: 'rgba(99, 102, 241, 0.1)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          borderTopLeftRadius: '24px',
+          borderTopRightRadius: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexDirection: 'column',
+          gap: '8px'
+        }}>
           <h2 style={{ 
             margin: 0, 
             color: '#1f2937', 
@@ -199,44 +195,46 @@ function Groups({ onViewGroupPlaces, onClose }) {
           }}>
             Groups
           </h2>
+          <button 
+            onClick={() => setShowCreateModal(true)}
+            style={{
+              padding: '2px 6px',
+              height: '20px',
+              minWidth: 'auto',
+              background: 'rgba(99, 102, 241, 0.9)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              color: 'white',
+              border: '1px solid rgba(99, 102, 241, 0.6)',
+              borderRadius: '10px',
+              fontSize: '10px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '3px',
+              boxShadow: '0 1px 3px rgba(99, 102, 241, 0.25)',
+              whiteSpace: 'nowrap',
+              lineHeight: '1'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(79, 70, 229, 0.95)';
+              e.target.style.transform = 'translateY(-1px)';
+              e.target.style.boxShadow = '0 2px 8px rgba(99, 102, 241, 0.35)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'rgba(99, 102, 241, 0.9)';
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = '0 1px 3px rgba(99, 102, 241, 0.25)';
+            }}
+          >
+            <span style={{ fontSize: '10px', fontWeight: '600', lineHeight: '1' }}>+</span>
+            <span style={{ fontSize: '10px', lineHeight: '1' }}>Create</span>
+          </button>
         </div>
-        <button 
-          onClick={() => setShowCreateModal(true)}
-          style={{
-            padding: '4px 10px',
-            height: '26px',
-            background: 'rgba(99, 102, 241, 0.9)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
-            color: 'white',
-            border: '1px solid rgba(99, 102, 241, 0.6)',
-            borderRadius: '16px',
-            fontSize: '12px',
-            fontWeight: '600',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '3px',
-            boxShadow: '0 1px 4px rgba(99, 102, 241, 0.25)',
-            whiteSpace: 'nowrap'
-          }}
-          onMouseEnter={(e) => {
-            e.target.style.background = 'rgba(79, 70, 229, 0.95)';
-            e.target.style.transform = 'translateY(-1px)';
-            e.target.style.boxShadow = '0 2px 8px rgba(99, 102, 241, 0.35)';
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.background = 'rgba(99, 102, 241, 0.9)';
-            e.target.style.transform = 'translateY(0)';
-            e.target.style.boxShadow = '0 1px 4px rgba(99, 102, 241, 0.25)';
-          }}
-        >
-          <span style={{ fontSize: '12px', fontWeight: '600', lineHeight: '1' }}>+</span>
-          <span>Create</span>
-        </button>
-      </div>
+      )}
 
       {/* Success Message Toast */}
       {successMessage && (
@@ -572,39 +570,46 @@ function Groups({ onViewGroupPlaces, onClose }) {
       {selectedGroup ? (
           /* Group Details View */
           <div className="group-details-view" style={{ minHeight: '100%' }}>
-            {/* Back Button */}
-          <button 
-              onClick={() => {
-                setSelectedGroup(null);
-                setError(null);
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 12px',
-                background: 'transparent',
-                border: 'none',
-                color: '#6366f1',
-                fontSize: '14px',
-                fontWeight: '500',
-                cursor: 'pointer',
-                marginBottom: '20px',
-                transition: 'all 0.2s ease',
-                borderRadius: '8px'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(99, 102, 241, 0.1)';
-                e.target.style.color = '#4f46e5';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'transparent';
-                e.target.style.color = '#6366f1';
-              }}
-            >
-              <span style={{ fontSize: '16px', lineHeight: '1' }}>←</span>
-              <span>Back</span>
-          </button>
+            {/* Breadcrumb Navigation */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '20px',
+              fontSize: '14px',
+              fontFamily: 'inherit'
+            }}>
+              <span
+                onClick={() => {
+                  setSelectedGroup(null);
+                  setError(null);
+                }}
+                style={{
+                  color: '#000000',
+                  fontSize: '14px',
+                  fontWeight: '400',
+                  cursor: 'pointer',
+                  padding: '0',
+                  transition: 'text-decoration 0.2s ease',
+                  textDecoration: 'none',
+                  background: 'none',
+                  border: 'none',
+                  outline: 'none'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.textDecoration = 'underline';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.textDecoration = 'none';
+                }}
+              >
+                Groups
+              </span>
+              <span style={{ color: '#9ca3af', fontSize: '14px' }}>›</span>
+              <span style={{ color: '#000000', fontSize: '14px', fontWeight: '400' }}>
+                {selectedGroup.group.name}
+              </span>
+            </div>
           
             {/* Group Info Card - Glass Design */}
             <div style={{
@@ -1103,41 +1108,39 @@ function Groups({ onViewGroupPlaces, onClose }) {
                 </button>
               </div>
             ) : (
-              /* Groups List - Glass Card Design */
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '16px',
+              /* Groups List - Modern Grid Layout */
+              <div className="groups-grid-container" style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: '24px',
                 paddingBottom: '8px'
               }}>
                 {groups.map(group => (
                   <div
                     key={group.group_id}
+                    className="group-card"
                     style={{
-                      /* Glass Card Effect - More Opaque for Better Readability */
-                      background: 'rgba(255, 255, 255, 0.85)',
-                      backdropFilter: 'blur(10px)',
-                      WebkitBackdropFilter: 'blur(10px)',
-                      padding: '20px',
+                      /* Modern Card Design */
+                      background: '#ffffff',
+                      padding: '24px',
                       borderRadius: '16px',
-                      border: '1px solid rgba(255, 255, 255, 0.5)',
-                      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)',
-                      transition: 'all 0.3s ease',
+                      border: '1px solid #e5e7eb',
+                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06)',
+                      transition: 'all 0.2s ease',
                       cursor: 'pointer',
                       display: 'flex',
-                      flexDirection: 'column'
+                      flexDirection: 'column',
+                      height: '100%'
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-4px)';
-                      e.currentTarget.style.boxShadow = '0 8px 24px rgba(31, 38, 135, 0.15), 0 4px 12px rgba(0, 0, 0, 0.1)';
-                      e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.5)';
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.95)';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.1)';
+                      e.currentTarget.style.borderColor = '#d1d5db';
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)';
-                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.5)';
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.85)';
+                      e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06)';
+                      e.currentTarget.style.borderColor = '#e5e7eb';
                     }}
                   >
                     {/* Group Header */}
@@ -1299,33 +1302,31 @@ function Groups({ onViewGroupPlaces, onClose }) {
                           style={{
                             padding: '6px 14px',
                             height: '32px',
-                            background: 'rgba(99, 102, 241, 0.1)',
-                            backdropFilter: 'blur(6px)',
-                            WebkitBackdropFilter: 'blur(6px)',
-                            color: '#6366f1',
-                            border: '1px solid rgba(99, 102, 241, 0.3)',
+                            background: 'rgba(99, 102, 241, 0.9)',
+                            backdropFilter: 'blur(8px)',
+                            WebkitBackdropFilter: 'blur(8px)',
+                            color: 'white',
+                            border: '1px solid rgba(99, 102, 241, 0.6)',
                             borderRadius: '20px',
                             fontSize: '13px',
                             fontWeight: '600',
                             cursor: 'pointer',
                             transition: 'all 0.2s ease',
-                            boxShadow: '0 1px 3px rgba(99, 102, 241, 0.12)',
+                            boxShadow: '0 2px 6px rgba(99, 102, 241, 0.3)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             whiteSpace: 'nowrap'
                           }}
                           onMouseEnter={(e) => {
-                            e.target.style.background = 'rgba(99, 102, 241, 0.15)';
-                            e.target.style.borderColor = 'rgba(99, 102, 241, 0.4)';
+                            e.target.style.background = 'rgba(79, 70, 229, 0.95)';
                             e.target.style.transform = 'translateY(-1px)';
-                            e.target.style.boxShadow = '0 2px 6px rgba(99, 102, 241, 0.2)';
+                            e.target.style.boxShadow = '0 4px 10px rgba(99, 102, 241, 0.4)';
                           }}
                           onMouseLeave={(e) => {
-                            e.target.style.background = 'rgba(99, 102, 241, 0.1)';
-                            e.target.style.borderColor = 'rgba(99, 102, 241, 0.3)';
+                            e.target.style.background = 'rgba(99, 102, 241, 0.9)';
                             e.target.style.transform = 'translateY(0)';
-                            e.target.style.boxShadow = '0 1px 3px rgba(99, 102, 241, 0.12)';
+                            e.target.style.boxShadow = '0 2px 6px rgba(99, 102, 241, 0.3)';
                           }}
                     >
                       Details

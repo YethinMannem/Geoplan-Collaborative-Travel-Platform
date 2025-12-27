@@ -192,3 +192,26 @@ export async function getPlaceGroups(placeId) {
   return fetchAPI(`/api/places/${placeId}/groups`);
 }
 
+// ============================================================================
+// GROUP ROUTES API
+// ============================================================================
+
+export async function getGroupRoute(groupId) {
+  return fetchAPI(`/api/groups/${groupId}/route`);
+}
+
+export async function saveGroupRoute(groupId, places, isGroupDefault = false) {
+  // places: Array of {place_id, order_index}
+  const method = isGroupDefault ? 'POST' : 'PUT';
+  return fetchAPI(`/api/groups/${groupId}/route`, {
+    method,
+    body: JSON.stringify({ places }),
+  });
+}
+
+export async function removeRoutePlace(groupId, placeId) {
+  return fetchAPI(`/api/groups/${groupId}/route/places/${placeId}`, {
+    method: 'DELETE',
+  });
+}
+

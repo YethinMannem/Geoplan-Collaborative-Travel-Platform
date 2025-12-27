@@ -2967,6 +2967,340 @@ def get_group_places(group_id):
         app.logger.error(f"Error getting group places: {e}")
         return jsonify({"error": "Failed to get group places", "details": str(e)}), 500
 
+# ============================================================================
+# GROUP ROUTES ENDPOINTS
+# ============================================================================
+
+@app.route("/api/groups/<int:group_id>/route", methods=['GET', 'OPTIONS'])
+def get_group_route(group_id):
+    """Get route for a group (user customization if exists, otherwise group default)."""
+    if request.method == 'OPTIONS':
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Auth-Token')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response, 200
+    
+    user_id = get_user_id_from_request()
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+    
+    try:
+        with get_conn() as conn, conn.cursor() as cur:
+            # Check if user is a member
+            cur.execute("""
+                SELECT role FROM group_members
+                WHERE group_id = %s AND user_id = %s
+            """, (group_id, user_id))
+            membership = cur.fetchone()
+            
+            if not membership:
+                return jsonify({"error": "You are not a member of this group"}), 403
+            
+            # Try to get user-customized route first
+            # Handle case where route tables don't exist yet (return empty route)
+            route_id = None
+            route_type = None
+            user_route = None
+            
+            try:
+                cur.execute("""
+                    SELECT route_id FROM user_group_routes
+                    WHERE group_id = %s AND user_id = %s
+                """, (group_id, user_id))
+                user_route = cur.fetchone()
+            except Exception as e:
+                # Check if it's a table doesn't exist error
+                error_msg = str(e).lower()
+                if 'does not exist' in error_msg or 'undefined_table' in error_msg or 'relation' in error_msg:
+                    # Route tables don't exist yet - return empty route
+                    return jsonify({
+                        "success": True,
+                        "route_id": None,
+                        "route_type": None,
+                        "places": []
+                    }), 200
+                # Otherwise, re-raise the error
+                raise
+            
+            if user_route:
+                route_id = user_route[0]
+                route_type = 'user'
+            else:
+                # Fall back to group default route
+                try:
+                    cur.execute("""
+                        SELECT route_id FROM group_routes
+                        WHERE group_id = %s
+                    """, (group_id,))
+                    group_route = cur.fetchone()
+                except Exception as e:
+                    # Check if it's a table doesn't exist error
+                    error_msg = str(e).lower()
+                    if 'does not exist' in error_msg or 'undefined_table' in error_msg or 'relation' in error_msg:
+                        # Route tables don't exist yet - return empty route
+                        return jsonify({
+                            "success": True,
+                            "route_id": None,
+                            "route_type": None,
+                            "places": []
+                        }), 200
+                    # Otherwise, re-raise the error
+                    raise
+                
+                if group_route:
+                    route_id = group_route[0]
+                    route_type = 'group'
+            
+            if not route_id:
+                return jsonify({
+                    "success": True,
+                    "route_id": None,
+                    "route_type": None,
+                    "places": []
+                }), 200
+            
+            # Get places in route ordered by order_index
+            cur.execute("""
+                SELECT rp.route_place_id, rp.place_id, rp.order_index,
+                       p.name, p.city, p.state, p.country, p.lat, p.lon,
+                       COALESCE(pwt.place_type, 'unknown') as place_type
+                FROM route_places rp
+                JOIN places p ON rp.place_id = p.id
+                LEFT JOIN places_with_types pwt ON p.id = pwt.id
+                WHERE rp.route_id = %s AND rp.route_type = %s
+                ORDER BY rp.order_index ASC
+            """, (route_id, route_type))
+            
+            places = []
+            for row in cur.fetchall():
+                places.append({
+                    "route_place_id": row[0],
+                    "place_id": row[1],
+                    "order_index": row[2],
+                    "name": row[3],
+                    "city": row[4],
+                    "state": row[5],
+                    "country": row[6],
+                    "lat": float(row[7]) if row[7] else None,
+                    "lon": float(row[8]) if row[8] else None,
+                    "place_type": row[9]
+                })
+            
+            return jsonify({
+                "success": True,
+                "route_id": route_id,
+                "route_type": route_type,
+                "places": places
+            }), 200
+            
+    except Exception as e:
+        app.logger.error(f"Error getting route for group {group_id}: {e}")
+        return jsonify({"error": "Failed to get route", "details": str(e)}), 500
+
+@app.route("/api/groups/<int:group_id>/route", methods=['POST', 'PUT', 'OPTIONS'])
+def save_group_route(group_id):
+    """Save route for a group (group default or user customization).
+    POST: Save as group default (admin only)
+    PUT: Save as user customization
+    """
+    if request.method == 'OPTIONS':
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Auth-Token')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response, 200
+    
+    user_id = get_user_id_from_request()
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+    
+    try:
+        data = request.get_json()
+        places = data.get("places", [])  # Array of {place_id, order_index}
+        
+        if not isinstance(places, list):
+            return jsonify({"error": "places must be an array"}), 400
+        
+        with get_conn() as conn, conn.cursor() as cur:
+            # Check if user is a member
+            cur.execute("""
+                SELECT role FROM group_members
+                WHERE group_id = %s AND user_id = %s
+            """, (group_id, user_id))
+            membership = cur.fetchone()
+            
+            if not membership:
+                return jsonify({"error": "You are not a member of this group"}), 403
+            
+            route_type = None
+            route_id = None
+            
+            if request.method == 'POST':
+                # Save as group default (admin only)
+                if membership[0] != 'admin':
+                    return jsonify({"error": "Only group admins can save group default routes"}), 403
+                
+                route_type = 'group'
+                
+                # Get or create group route
+                cur.execute("""
+                    SELECT route_id FROM group_routes
+                    WHERE group_id = %s
+                """, (group_id,))
+                existing = cur.fetchone()
+                
+                if existing:
+                    route_id = existing[0]
+                    # Update updated_at
+                    cur.execute("""
+                        UPDATE group_routes SET updated_at = CURRENT_TIMESTAMP
+                        WHERE route_id = %s
+                    """, (route_id,))
+                else:
+                    cur.execute("""
+                        INSERT INTO group_routes (group_id, created_by)
+                        VALUES (%s, %s)
+                        RETURNING route_id
+                    """, (group_id, user_id))
+                    route_id = cur.fetchone()[0]
+            
+            elif request.method == 'PUT':
+                # Save as user customization
+                route_type = 'user'
+                
+                # Get or create user route
+                cur.execute("""
+                    SELECT route_id FROM user_group_routes
+                    WHERE group_id = %s AND user_id = %s
+                """, (group_id, user_id))
+                existing = cur.fetchone()
+                
+                if existing:
+                    route_id = existing[0]
+                    # Update updated_at
+                    cur.execute("""
+                        UPDATE user_group_routes SET updated_at = CURRENT_TIMESTAMP
+                        WHERE route_id = %s
+                    """, (route_id,))
+                else:
+                    cur.execute("""
+                        INSERT INTO user_group_routes (group_id, user_id)
+                        VALUES (%s, %s)
+                        RETURNING route_id
+                    """, (group_id, user_id))
+                    route_id = cur.fetchone()[0]
+            
+            # Delete existing route places
+            cur.execute("""
+                DELETE FROM route_places
+                WHERE route_id = %s AND route_type = %s
+            """, (route_id, route_type))
+            
+            # Insert new route places
+            for idx, place_data in enumerate(places):
+                place_id = place_data.get("place_id")
+                order_index = place_data.get("order_index", idx)
+                
+                if not place_id:
+                    continue
+                
+                # Verify place exists
+                cur.execute("SELECT id FROM places WHERE id = %s", (place_id,))
+                if not cur.fetchone():
+                    continue
+                
+                cur.execute("""
+                    INSERT INTO route_places (route_id, route_type, place_id, order_index)
+                    VALUES (%s, %s, %s, %s)
+                """, (route_id, route_type, place_id, order_index))
+            
+            conn.commit()
+            
+            return jsonify({
+                "success": True,
+                "route_id": route_id,
+                "route_type": route_type,
+                "message": "Route saved successfully"
+            }), 200
+            
+    except Exception as e:
+        app.logger.error(f"Error saving route for group {group_id}: {e}")
+        return jsonify({"error": "Failed to save route", "details": str(e)}), 500
+
+@app.route("/api/groups/<int:group_id>/route/places/<int:place_id>", methods=['DELETE', 'OPTIONS'])
+def remove_route_place(group_id, place_id):
+    """Remove a place from the current user's route (user customization only)."""
+    if request.method == 'OPTIONS':
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Auth-Token')
+        response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response, 200
+    
+    user_id = get_user_id_from_request()
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+    
+    try:
+        with get_conn() as conn, conn.cursor() as cur:
+            # Check if user is a member
+            cur.execute("""
+                SELECT role FROM group_members
+                WHERE group_id = %s AND user_id = %s
+            """, (group_id, user_id))
+            membership = cur.fetchone()
+            
+            if not membership:
+                return jsonify({"error": "You are not a member of this group"}), 403
+            
+            # Get user route (must be user customization, not group default)
+            cur.execute("""
+                SELECT route_id FROM user_group_routes
+                WHERE group_id = %s AND user_id = %s
+            """, (group_id, user_id))
+            user_route = cur.fetchone()
+            
+            if not user_route:
+                return jsonify({"error": "No user route found"}), 404
+            
+            route_id = user_route[0]
+            
+            # Delete the place from route
+            cur.execute("""
+                DELETE FROM route_places
+                WHERE route_id = %s AND route_type = 'user' AND place_id = %s
+            """, (route_id, place_id))
+            
+            # Reorder remaining places
+            cur.execute("""
+                SELECT route_place_id FROM route_places
+                WHERE route_id = %s AND route_type = 'user'
+                ORDER BY order_index ASC
+            """, (route_id,))
+            
+            remaining_ids = [row[0] for row in cur.fetchall()]
+            
+            for idx, rp_id in enumerate(remaining_ids):
+                cur.execute("""
+                    UPDATE route_places SET order_index = %s
+                    WHERE route_place_id = %s
+                """, (idx, rp_id))
+            
+            conn.commit()
+            
+            return jsonify({
+                "success": True,
+                "message": "Place removed from route"
+            }), 200
+            
+    except Exception as e:
+        app.logger.error(f"Error removing place from route: {e}")
+        return jsonify({"error": "Failed to remove place from route", "details": str(e)}), 500
+
 @app.get("/api/places/<int:place_id>/groups")
 def get_place_groups(place_id):
     """Get all groups that include this place (where current user is a member)."""

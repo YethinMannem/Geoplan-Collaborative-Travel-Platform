@@ -41,29 +41,15 @@ function ModernFilterDropdown({
     }
   };
 
+  const removeValue = (value, e) => {
+    e.stopPropagation(); // Prevent dropdown from opening when clicking X
+    const newSelected = selectedValues.filter(v => v !== value);
+    onChange(newSelected);
+  };
+
   const isSelected = (option) => {
     const value = getOptionValue(option);
     return selectedValues.includes(value);
-  };
-
-  // Smart display text logic - Modern approach
-  const getDisplayText = () => {
-    if (selectedValues.length === 0) {
-      return placeholder || label || 'Select...';
-    }
-    
-    if (selectedValues.length === 1) {
-      // Single selection: Show the exact name of the selected item
-      const selectedOption = options.find(opt => getOptionValue(opt) === selectedValues[0]);
-      return selectedOption ? getOptionLabel(selectedOption) : selectedValues[0];
-    }
-    
-    // Multiple selections: Show first item + count badge
-    // Format: "Restaurant +2" (if Restaurant, Brewery, Hotel are selected)
-    const firstOption = options.find(opt => getOptionValue(opt) === selectedValues[0]);
-    const firstLabel = firstOption ? getOptionLabel(firstOption) : selectedValues[0];
-    const additionalCount = selectedValues.length - 1;
-    return `${firstLabel} +${additionalCount}`;
   };
 
   const hasActiveSelection = selectedValues.length > 0;
@@ -76,16 +62,16 @@ function ModernFilterDropdown({
         onClick={() => setIsOpen(!isOpen)}
         style={{
           width: '100%',
-          padding: '10px 40px 10px 14px',
+          padding: '8px 40px 8px 12px',
           fontSize: '0.875rem',
           fontWeight: '500',
-          color: hasActiveSelection ? '#1f2937' : '#6b7280',
+          color: '#000000',
           background: '#ffffff',
           border: `1px solid ${hasActiveSelection ? activeColor : '#e5e7eb'}`,
           borderRadius: '12px', // Soft rounded rectangle (not fully pill, but modern)
           cursor: 'pointer',
           textAlign: 'left',
-          transition: 'all 0.2s ease',
+          transition: 'border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease',
           boxShadow: isOpen 
             ? `0 4px 12px rgba(0, 0, 0, 0.1)` 
             : hasActiveSelection
@@ -94,31 +80,91 @@ function ModernFilterDropdown({
           position: 'relative',
           display: 'flex',
           alignItems: 'center',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap'
+          flexWrap: 'wrap',
+          gap: '6px',
+          minHeight: '40px'
         }}
         onMouseEnter={(e) => {
           if (!isOpen) {
             e.currentTarget.style.borderColor = hasActiveSelection ? activeColor : '#d1d5db';
             e.currentTarget.style.background = '#f9fafb';
+            e.currentTarget.style.color = '#000000';
           }
         }}
         onMouseLeave={(e) => {
           if (!isOpen) {
             e.currentTarget.style.borderColor = hasActiveSelection ? activeColor : '#e5e7eb';
             e.currentTarget.style.background = '#ffffff';
+            e.currentTarget.style.color = '#000000';
           }
         }}
       >
-        <span style={{
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          flex: 1
-        }}>
-          {getDisplayText()}
-        </span>
+        {selectedValues.length === 0 ? (
+          <span style={{
+            color: '#6b7280',
+            fontSize: '0.875rem',
+            fontWeight: '400'
+          }}>
+            {placeholder || label || 'Select...'}
+          </span>
+        ) : (
+          selectedValues.map((value) => {
+            const option = options.find(opt => getOptionValue(opt) === value);
+            const label = option ? getOptionLabel(option) : value;
+            return (
+              <div
+                key={value}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '4px 8px',
+                  background: '#f3f4f6',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  fontSize: '0.8125rem',
+                  fontWeight: '500',
+                  color: '#000000',
+                  flexShrink: 0
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <span>{label}</span>
+                <button
+                  type="button"
+                  onClick={(e) => removeValue(value, e)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '0',
+                    margin: '0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '16px',
+                    height: '16px',
+                    borderRadius: '50%',
+                    color: '#000000',
+                    fontSize: '14px',
+                    lineHeight: '1',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#e5e7eb';
+                    e.currentTarget.style.color = '#000000';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = '#000000';
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })
+        )}
         {/* Chevron Down Icon - Sleek and modern */}
         <svg
           style={{
@@ -224,7 +270,7 @@ function ModernFilterDropdown({
                 )}
                 <span style={{
                   fontSize: '0.875rem',
-                  color: '#1f2937',
+                  color: '#000000',
                   fontWeight: selected ? '600' : '400',
                   flex: 1
                 }}>

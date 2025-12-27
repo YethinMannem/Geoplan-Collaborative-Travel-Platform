@@ -431,3 +431,47 @@
   margin-bottom: var(--spacing-md);
   animation: pulse 2s ease-in-out infinite;
 }
+
+/* Groups Grid Layout - Responsive */
+.groups-grid-container {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  padding-bottom: 8px;
+}
+
+/* Tablet: Still 2 columns */
+@media (max-width: 1024px) {
+  .groups-grid-container {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+  }
+}
+
+/* Mobile: 1 column */
+@media (max-width: 768px) {
+  .groups-grid-container {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* Modern Group Card Styling */
+.group-card {
+  background: #ffffff;
+  padding: 24px;
+  border-radius: 16px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.group-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-color: #d1d5db;
+}

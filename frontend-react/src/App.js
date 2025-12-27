@@ -23,13 +23,14 @@ if (!API_KEY || API_KEY.trim() === '') {
 }
 const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:5001';
 
-const mapContainerStyle = {
+const getMapContainerStyle = (selectedGroupId) => ({
   width: '100vw',
   height: '100vh',
-  position: 'absolute',
+  position: 'fixed',
   top: 0,
-  left: 0
-};
+  left: 0,
+  zIndex: selectedGroupId ? 1 : 1 // Keep map at z-index 1 so it's behind modals
+});
 
 const defaultCenter = {
   lat: 29.7604,
@@ -90,6 +91,7 @@ function App() {
   // Groups state
   const [showGroups, setShowGroups] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
+  const [groupsViewState, setGroupsViewState] = useState(null);
   
   // User header card toggle
   const [showUserHeader, setShowUserHeader] = useState(false); // Hidden by default - using NavBar instead
@@ -138,6 +140,7 @@ function App() {
   const clustererRef = useRef(null);
   const markerClustererLibRef = useRef(null);
   const googleMarkersRef = useRef([]);
+  const routePolylineRef = useRef(null);
 
   // Clear markers function (must be defined before useEffects that use it)
   const clearAllMarkers = React.useCallback(() => {
@@ -160,6 +163,12 @@ function App() {
         // Silently handle clusterer cleanup errors
       }
       clustererRef.current = null;
+    }
+    
+    // Clear polyline if it exists
+    if (routePolylineRef.current) {
+      routePolylineRef.current.setMap(null);
+      routePolylineRef.current = null;
     }
   }, []);
 
@@ -1028,10 +1037,25 @@ function App() {
 
       const google = window.google;
       const newMarkers = [];
+      
+      // Check if these are route places (have order_index property)
+      const isRoutePlaces = safeResults.length > 0 && safeResults.some(p => 
+        p.routePlace === true || typeof p.order_index === 'number'
+      );
+      
+      // Sort route places by order_index
+      const sortedResults = isRoutePlaces 
+        ? [...safeResults].sort((a, b) => {
+            const aIdx = a.order_index ?? 0;
+            const bIdx = b.order_index ?? 0;
+            return aIdx - bIdx;
+          })
+        : safeResults;
 
-      // For 5+ markers, use clustering
-      if (safeResults.length >= 5 && markerClustererLibRef.current) {
-        const markers = safeResults.map(place => {
+      // For route places, create numbered markers and polyline
+      if (isRoutePlaces) {
+        const routePositions = [];
+        const markers = sortedResults.map((place, index) => {
           try {
             const position = {
               lat: parseFloat(place.lat || place.latitude),
@@ -1039,7 +1063,76 @@ function App() {
             };
 
             if (isNaN(position.lat) || isNaN(position.lng)) {
-              // Skip places with invalid coordinates
+              return null;
+            }
+            
+            routePositions.push(position);
+
+            // Create numbered marker for route places
+            const marker = new google.maps.Marker({
+              position,
+              map,
+              title: `${index + 1}. ${place.name || 'Unknown'}`,
+              animation: google.maps.Animation.DROP,
+              label: {
+                text: String(index + 1),
+                color: 'white',
+                fontSize: '14px',
+                fontWeight: 'bold'
+              },
+              icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 12,
+                fillColor: '#6366f1',
+                fillOpacity: 1,
+                strokeColor: 'white',
+                strokeWeight: 2
+              }
+            });
+
+            marker.addListener('click', () => {
+              handleMarkerClick(place);
+            });
+
+            return marker;
+          } catch (e) {
+            return null;
+          }
+        }).filter(m => m !== null);
+        
+        // Create polyline connecting route places
+        if (routePositions.length > 1) {
+          routePolylineRef.current = new google.maps.Polyline({
+            path: routePositions,
+            geodesic: true,
+            strokeColor: '#6366f1',
+            strokeOpacity: 0.8,
+            strokeWeight: 3,
+            map: map
+          });
+        }
+        
+        // Fit map bounds to show all route places
+        if (routePositions.length > 0) {
+          const bounds = new google.maps.LatLngBounds();
+          routePositions.forEach(pos => bounds.extend(pos));
+          map.fitBounds(bounds, {
+            padding: 80 // Add padding around the bounds
+          });
+        }
+        
+        googleMarkersRef.current = markers;
+        newMarkers.push(...markers);
+      } else if (sortedResults.length >= 5 && markerClustererLibRef.current) {
+        // For 5+ non-route markers, use clustering
+        const markers = sortedResults.map(place => {
+          try {
+            const position = {
+              lat: parseFloat(place.lat || place.latitude),
+              lng: parseFloat(place.lon || place.longitude)
+            };
+
+            if (isNaN(position.lat) || isNaN(position.lng)) {
               return null;
             }
 
@@ -1056,7 +1149,6 @@ function App() {
 
             return marker;
           } catch (e) {
-            // Skip places that fail to create markers
             return null;
           }
         }).filter(m => m !== null);
@@ -1074,7 +1166,7 @@ function App() {
         }
       } else {
         // For < 5 markers, add individually
-        safeResults.forEach(place => {
+        sortedResults.forEach(place => {
           try {
             const position = {
               lat: parseFloat(place.lat || place.latitude),
@@ -1258,106 +1350,94 @@ function App() {
 
       {/* Groups Modal */}
       {showGroups && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          backdropFilter: 'blur(4px)',
-          zIndex: 1000,
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'flex-start',
-          padding: '104px 20px 20px 20px'
-        }}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) {
-            setShowGroups(false);
-            setSelectedGroupId(null);
-          }
-        }}
-        >
+        !selectedGroupId ? (
           <div style={{
-            /* Glassmorphism Effect - More Opaque */
-            background: 'rgba(255, 255, 255, 0.65)',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            border: '1px solid rgba(255, 255, 255, 0.4)',
-            borderRadius: '24px',
-            padding: '0',
-            width: '75vw',
-            maxHeight: '90vh',
-            overflow: 'hidden',
-            boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.15)',
-            position: 'relative',
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 1000,
             display: 'flex',
-            flexDirection: 'column'
+            justifyContent: 'center',
+            alignItems: 'flex-start',
+            padding: '104px 20px 20px 20px',
+            pointerEvents: 'auto'
           }}
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowGroups(false);
+              setSelectedGroupId(null);
+            }
+          }}
           >
-            <button
-              onClick={() => {
-                setShowGroups(false);
-                setSelectedGroupId(null);
-                setGroupPlacesMode(false);
-                resetToSearchMode();
-              }}
-              style={{
-                position: 'absolute',
-                top: '14px',
-                right: '14px',
-                width: '24px',
-                height: '24px',
-                borderRadius: '6px',
-                background: 'rgba(255, 255, 255, 0.5)',
-                backdropFilter: 'blur(8px)',
-                WebkitBackdropFilter: 'blur(8px)',
-                border: '1px solid rgba(255, 255, 255, 0.4)',
-                cursor: 'pointer',
-                fontSize: '14px',
-                color: '#64748b',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.2s ease',
-                zIndex: 10,
-                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
-                fontWeight: '300',
-                lineHeight: '1'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(239, 68, 68, 0.2)';
-                e.target.style.color = '#dc2626';
-                e.target.style.borderColor = 'rgba(239, 68, 68, 0.4)';
-                e.target.style.transform = 'scale(1.05)';
-                e.target.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'rgba(255, 255, 255, 0.5)';
-                e.target.style.color = '#64748b';
-                e.target.style.borderColor = 'rgba(255, 255, 255, 0.4)';
-                e.target.style.transform = 'scale(1)';
-                e.target.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08)';
-              }}
+            <div style={{
+              pointerEvents: 'auto',
+              background: 'rgba(255, 255, 255, 0.65)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              border: '1px solid rgba(255, 255, 255, 0.4)',
+              borderRadius: '24px',
+              padding: '0',
+              width: '75vw',
+              maxHeight: '90vh',
+              overflow: 'hidden',
+              boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.15)',
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+            onClick={(e) => e.stopPropagation()}
             >
-              ×
-            </button>
-            {selectedGroupId ? (
-              <GroupPlaces
-                groupId={selectedGroupId}
-                onBack={() => {
+              <button
+                onClick={() => {
+                  setShowGroups(false);
                   setSelectedGroupId(null);
                   setGroupPlacesMode(false);
+                  resetToSearchMode();
                 }}
-                onShowOnMap={(places) => {
-                    setGroupPlacesMode(true);
-                  setResults(Array.isArray(places) ? places : []);
-                    setShowGroups(false);
+                style={{
+                  position: 'absolute',
+                  top: '14px',
+                  right: '14px',
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '6px',
+                  background: 'rgba(255, 255, 255, 0.5)',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
+                  border: '1px solid rgba(255, 255, 255, 0.4)',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  color: '#000000',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                  zIndex: 10,
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+                  fontWeight: '300',
+                  lineHeight: '1'
                 }}
-              />
-            ) : (
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(239, 68, 68, 0.2)';
+                  e.target.style.color = '#dc2626';
+                  e.target.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+                  e.target.style.transform = 'scale(1.05)';
+                  e.target.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'rgba(255, 255, 255, 0.5)';
+                  e.target.style.color = '#64748b';
+                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.4)';
+                  e.target.style.transform = 'scale(1)';
+                  e.target.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08)';
+                }}
+              >
+                ×
+              </button>
               <Groups
                 onSelectGroup={(groupId) => {
                   setSelectedGroupId(groupId);
@@ -1368,11 +1448,106 @@ function App() {
                 onClose={() => {
                   setShowGroups(false);
                   setSelectedGroupId(null);
+                  setGroupsViewState(null);
                 }}
+                initialGroupIdToShow={groupsViewState?.showGroupDetails}
               />
-            )}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div style={{
+            position: 'fixed',
+            top: '84px',
+            left: 0,
+            width: '100vw',
+            height: 'calc(100vh - 84px)',
+            zIndex: 999,
+            display: 'flex',
+            flexDirection: 'column',
+            pointerEvents: 'auto'
+          }}>
+            <div style={{
+              pointerEvents: 'auto',
+              background: 'transparent',
+              padding: '0',
+              width: '100%',
+              height: '100%',
+              overflow: 'hidden',
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+            onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => {
+                  setShowGroups(false);
+                  setSelectedGroupId(null);
+                  setGroupPlacesMode(false);
+                  resetToSearchMode();
+                }}
+                style={{
+                  position: 'absolute',
+                  top: '14px',
+                  right: '14px',
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '6px',
+                  background: 'rgba(255, 255, 255, 0.5)',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
+                  border: '1px solid rgba(255, 255, 255, 0.4)',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  color: '#000000',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                  zIndex: 10,
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+                  fontWeight: '300',
+                  lineHeight: '1'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(239, 68, 68, 0.2)';
+                  e.target.style.color = '#dc2626';
+                  e.target.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+                  e.target.style.transform = 'scale(1.05)';
+                  e.target.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'rgba(255, 255, 255, 0.5)';
+                  e.target.style.color = '#64748b';
+                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.4)';
+                  e.target.style.transform = 'scale(1)';
+                  e.target.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08)';
+                }}
+              >
+                ×
+              </button>
+              <GroupPlaces
+                groupId={selectedGroupId}
+                onBack={() => {
+                  setSelectedGroupId(null);
+                  setGroupPlacesMode(false);
+                }}
+                onBackToGroupDetails={() => {
+                  setSelectedGroupId(null);
+                  setGroupPlacesMode(false);
+                  setGroupsViewState({ showGroupDetails: selectedGroupId });
+                }}
+                onShowOnMap={(places, title) => {
+                    setGroupPlacesMode(true);
+                  setResults(Array.isArray(places) ? places : []);
+                    if (!places || places.length === 0) {
+                    }
+                }}
+                showRoutePlannerInModal={true}
+              />
+            </div>
+          </div>
+        )
       )}
 
       {/* Add Location Form */}
@@ -1790,7 +1965,7 @@ function App() {
         )}
 
         <GoogleMap
-          mapContainerStyle={mapContainerStyle}
+          mapContainerStyle={getMapContainerStyle(selectedGroupId)}
           center={defaultCenter}
           zoom={defaultZoom}
           onLoad={onMapLoad}
