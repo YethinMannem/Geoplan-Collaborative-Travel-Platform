@@ -76,6 +76,13 @@ export async function getUserProfile() {
   return fetchAPI('/api/users/profile');
 }
 
+export async function updateUserProfile(profileData) {
+  return fetchAPI('/api/users/profile', {
+    method: 'PUT',
+    body: JSON.stringify(profileData),
+  });
+}
+
 // Visited List
 export async function getVisitedList(lat = null, lon = null) {
   const params = new URLSearchParams();
@@ -184,6 +191,17 @@ export async function removeGroupMember(groupId, memberId) {
   });
 }
 
+export async function getGroupMessages(groupId) {
+  return fetchAPI(`/api/groups/${groupId}/messages`);
+}
+
+export async function sendGroupMessage(groupId, messageText) {
+  return fetchAPI(`/api/groups/${groupId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ message_text: messageText }),
+  });
+}
+
 export async function getGroupPlaces(groupId) {
   return fetchAPI(`/api/groups/${groupId}/places`);
 }
@@ -200,12 +218,13 @@ export async function getGroupRoute(groupId) {
   return fetchAPI(`/api/groups/${groupId}/route`);
 }
 
-export async function saveGroupRoute(groupId, places, isGroupDefault = false) {
+export async function saveGroupRoute(groupId, places, isGroupDefault = false, mayCoverPlaces = []) {
   // places: Array of {place_id, order_index}
+  // mayCoverPlaces: Array of {place_id}
   const method = isGroupDefault ? 'POST' : 'PUT';
   return fetchAPI(`/api/groups/${groupId}/route`, {
     method,
-    body: JSON.stringify({ places }),
+    body: JSON.stringify({ places, may_cover_places: mayCoverPlaces }),
   });
 }
 

@@ -44,3 +44,4 @@ COMMENT ON COLUMN tourist_places.pet_friendly IS 'Whether the tourist place allo
 COMMENT ON COLUMN tourist_places.guided_tours IS 'Whether the tourist place offers guided tours';
 COMMENT ON COLUMN tourist_places.hours_of_operation IS 'Operating hours for the tourist place (for Open Now filter)';
 
+

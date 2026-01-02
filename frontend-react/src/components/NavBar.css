@@ -134,6 +134,8 @@
   font-weight: 800;
   font-size: 0.875rem;
   box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
 /* Dropdown Menu */

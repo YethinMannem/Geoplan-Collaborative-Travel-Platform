@@ -1,5 +1,44 @@
 import React, { useState } from 'react';
 
+// Helper function to render user avatar (UserPanel uses 80px avatars)
+const renderUserAvatar = (userAccount, size = 'large') => {
+  const hasPhoto = userAccount?.profile_photo_url;
+  const displayName = userAccount?.display_name || userAccount?.username;
+  const initials = displayName?.[0]?.toUpperCase() || '👤';
+  
+  // UserPanel uses larger avatar (80px) compared to NavBar
+  const avatarStyle = {
+    width: '80px',
+    height: '80px'
+  };
+  
+  if (hasPhoto) {
+    return (
+      <div 
+        className="avatar-circle"
+        style={{
+          ...avatarStyle,
+          backgroundImage: `url(${userAccount.profile_photo_url})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+        title={displayName}
+      >
+        {/* Empty - image is background */}
+      </div>
+    );
+  }
+  
+  return (
+    <div className="avatar-circle" style={avatarStyle} title={displayName}>
+      <span style={{ fontSize: '1.75rem', fontWeight: '800', color: 'white' }}>
+        {initials}
+      </span>
+    </div>
+  );
+};
+
 function UserPanel({
   userAccount,
   userRole,
@@ -15,7 +54,8 @@ function UserPanel({
   uploadingCSV,
   fileInputRef,
   activeListView,
-  showGroups
+  showGroups,
+  onShowAccountSettings
 }) {
   const [expandedSection, setExpandedSection] = useState(null);
 
@@ -55,15 +95,11 @@ function UserPanel({
       {/* Header Section */}
       <div className="user-panel-header">
         <div className="user-avatar">
-          <div className="avatar-circle">
-            {userAccount ? (
-              <span style={{ fontSize: '1.75rem', fontWeight: '800', color: 'white' }}>
-                {userAccount.username?.[0]?.toUpperCase() || '👤'}
-              </span>
-            ) : (
+          {userAccount ? renderUserAvatar(userAccount, 'large') : (
+            <div className="avatar-circle">
               <span style={{ fontSize: '1.75rem' }}>👤</span>
-            )}
-          </div>
+            </div>
+          )}
         </div>
         <div className="user-details">
           <div className="user-name">
@@ -76,7 +112,7 @@ function UserPanel({
                   display: 'block',
                   lineHeight: '1.4'
                 }}>
-                  {userAccount.username || 'User'}
+                  {userAccount.display_name || userAccount.username || 'User'}
                 </span>
                 {userAccount.email && (
                   <span style={{ 

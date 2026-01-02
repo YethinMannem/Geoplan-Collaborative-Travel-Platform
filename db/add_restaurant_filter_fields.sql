@@ -39,3 +39,4 @@ COMMENT ON COLUMN restaurants.delivery IS 'Whether the restaurant offers deliver
 COMMENT ON COLUMN restaurants.takeout IS 'Whether the restaurant offers takeout service';
 COMMENT ON COLUMN restaurants.reservations IS 'Whether the restaurant accepts reservations';
 
+

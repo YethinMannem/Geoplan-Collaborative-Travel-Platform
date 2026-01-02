@@ -96,3 +96,4 @@ FROM tourist_places
 GROUP BY place_type
 ORDER BY count DESC;
 
+

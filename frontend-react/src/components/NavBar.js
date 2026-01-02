@@ -1,6 +1,42 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './NavBar.css';
 
+// Helper function to render user avatar
+const renderUserAvatar = (userAccount, size = 'small') => {
+  const hasPhoto = userAccount?.profile_photo_url;
+  const displayName = userAccount?.display_name || userAccount?.username;
+  const initials = displayName?.[0]?.toUpperCase() || '👤';
+  
+  const avatarClasses = {
+    small: 'user-avatar-small',
+    menu: 'user-avatar-menu'
+  };
+  const className = avatarClasses[size] || avatarClasses.small;
+  
+  if (hasPhoto) {
+    return (
+      <div 
+        className={className}
+        style={{
+          backgroundImage: `url(${userAccount.profile_photo_url})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+        title={displayName}
+      >
+        {/* Empty - image is background */}
+      </div>
+    );
+  }
+  
+  return (
+    <div className={className} title={displayName}>
+      {initials}
+    </div>
+  );
+};
+
 function NavBar({
   userAccount,
   userRole,
@@ -16,7 +52,8 @@ function NavBar({
   addingLocation = false,
   onCSVUpload,
   uploadingCSV = false,
-  fileInputRef
+  fileInputRef,
+  onShowAccountSettings
 }) {
   const [showListsMenu, setShowListsMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -157,10 +194,8 @@ function NavBar({
             >
               {userAccount ? (
                 <>
-                  <div className="user-avatar-small">
-                    {userAccount.username?.[0]?.toUpperCase() || '👤'}
-                  </div>
-                  <span className="nav-label">{userAccount.username}</span>
+                  {renderUserAvatar(userAccount, 'small')}
+                  <span className="nav-label">{userAccount.display_name || userAccount.username}</span>
                 </>
               ) : (
                 <>
@@ -176,11 +211,9 @@ function NavBar({
                 {userAccount ? (
                   <>
                     <div className="user-menu-header">
-                      <div className="user-avatar-menu">
-                        {userAccount.username?.[0]?.toUpperCase() || '👤'}
-                      </div>
+                      {renderUserAvatar(userAccount, 'menu')}
                       <div className="user-menu-info">
-                        <div className="user-menu-name">{userAccount.username}</div>
+                        <div className="user-menu-name">{userAccount.display_name || userAccount.username}</div>
                         {userAccount.email && (
                           <div className="user-menu-email">{userAccount.email}</div>
                         )}
@@ -251,16 +284,18 @@ function NavBar({
                       </>
                     )}
                     
-                    <button
-                      className="dropdown-item"
-                      onClick={() => {
-                        setShowUserMenu(false);
-                        onShowUserAuth();
-                      }}
-                    >
-                      <span className="dropdown-item-icon">⚙️</span>
-                      <span className="dropdown-item-label">Settings</span>
-                    </button>
+                    {onShowAccountSettings && (
+                      <button
+                        className="dropdown-item"
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          onShowAccountSettings();
+                        }}
+                      >
+                        <span className="dropdown-item-icon">⚙️</span>
+                        <span className="dropdown-item-label">Account Settings</span>
+                      </button>
+                    )}
                     <button
                       className="dropdown-item logout-item"
                       onClick={() => {

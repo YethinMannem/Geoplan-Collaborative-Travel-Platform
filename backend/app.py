@@ -37,6 +37,7 @@ from flask import Flask, request, jsonify, session
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_limiter.errors import RateLimitExceeded
 from marshmallow import ValidationError
 from dotenv import load_dotenv
 import psycopg
@@ -129,7 +130,7 @@ if redis_available:
         limiter = Limiter(
             app=app,
             key_func=get_remote_address,
-            default_limits=["200 per day", "50 per hour"],
+            default_limits=["5000 per day", "500 per hour"],
             storage_uri=redis_url,
             strategy="fixed-window",
             swallow_errors=True  # Don't crash if Redis fails during request
@@ -144,7 +145,7 @@ if not redis_available:
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,
-        default_limits=["200 per day", "50 per hour"],
+        default_limits=["5000 per day", "500 per hour"],
         storage_uri="memory://",  # In-memory fallback
         swallow_errors=True
     )
@@ -1973,8 +1974,34 @@ def get_user_profile():
     
     try:
         with get_conn() as conn, conn.cursor() as cur:
-            # Get user info
-            cur.execute("SELECT user_id, username, email, created_at FROM users WHERE user_id = %s", (user_id,))
+            # Check if profile columns exist first (before any queries that might fail)
+            cur.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'users' AND column_name IN ('display_name', 'profile_photo_url', 'bio', 'location', 'website', 'updated_at')
+            """)
+            existing_columns = {row[0] for row in cur.fetchall()}
+            
+            # Build SELECT query based on available columns
+            base_cols = ["user_id", "username", "email", "created_at"]
+            if 'updated_at' in existing_columns:
+                base_cols.append("updated_at")
+            else:
+                base_cols.append("NULL as updated_at")
+            
+            # Add profile columns if they exist, otherwise use NULL
+            for col in ['display_name', 'profile_photo_url', 'bio', 'location', 'website']:
+                if col in existing_columns:
+                    base_cols.append(col)
+                else:
+                    base_cols.append(f"NULL as {col}")
+            
+            query = f"""
+                SELECT {', '.join(base_cols)}
+                FROM users WHERE user_id = %s
+            """
+            
+            cur.execute(query, (user_id,))
             user = cur.fetchone()
             
             if not user:
@@ -1990,13 +2017,28 @@ def get_user_profile():
             cur.execute("SELECT COUNT(*) FROM user_liked_places WHERE user_id = %s", (user_id,))
             liked_count = cur.fetchone()[0]
             
+            # Build user dict based on query results (columns are in fixed order)
+            idx = 0
+            user_dict = {
+                "user_id": user[idx],
+                "username": user[idx + 1],
+                "email": user[idx + 2],
+                "created_at": user[idx + 3].isoformat() if user[idx + 3] else None,
+            }
+            idx = 4
+            
+            # Add updated_at (always included in query, may be NULL)
+            user_dict["updated_at"] = user[idx].isoformat() if user[idx] else None
+            idx += 1
+            
+            # Add profile fields (always included in query as columns or NULL, in fixed order)
+            profile_fields = ['display_name', 'profile_photo_url', 'bio', 'location', 'website']
+            for col in profile_fields:
+                user_dict[col] = user[idx] if idx < len(user) and user[idx] is not None else None
+                idx += 1
+            
             return jsonify({
-                "user": {
-                    "user_id": user[0],
-                    "username": user[1],
-                    "email": user[2],
-                    "created_at": user[3].isoformat() if user[3] else None
-                },
+                "user": user_dict,
                 "statistics": {
                     "visited_count": visited_count,
                     "wishlist_count": wishlist_count,
@@ -2007,6 +2049,160 @@ def get_user_profile():
     except Exception as e:
         app.logger.error(f"Error getting profile: {e}")
         return jsonify({"error": "Failed to get profile", "details": str(e)}), 500
+
+@app.put("/api/users/profile")
+def update_user_profile():
+    """Update current user profile."""
+    user_id = get_user_id_from_request()
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+    
+    try:
+        data = request.get_json()
+        
+        # Validate input - allow empty strings to clear fields
+        display_name = data.get("display_name")
+        if display_name is not None:
+            display_name = display_name.strip() if isinstance(display_name, str) else None
+            # Allow empty string to clear the field
+            if display_name == "":
+                display_name = None
+        
+        profile_photo_url = data.get("profile_photo_url")
+        if profile_photo_url is not None:
+            profile_photo_url = profile_photo_url.strip() if isinstance(profile_photo_url, str) else None
+            if profile_photo_url == "":
+                profile_photo_url = None
+        
+        bio = data.get("bio")
+        if bio is not None:
+            bio = bio.strip() if isinstance(bio, str) else None
+            if bio == "":
+                bio = None
+        
+        location = data.get("location")
+        if location is not None:
+            location = location.strip() if isinstance(location, str) else None
+            if location == "":
+                location = None
+        
+        website = data.get("website")
+        if website is not None:
+            website = website.strip() if isinstance(website, str) else None
+            if website == "":
+                website = None
+        
+        # Validate display_name length if provided
+        if display_name is not None and (len(display_name) < 1 or len(display_name) > 100):
+            return jsonify({"error": "Display name must be 1-100 characters"}), 400
+        
+        # Validate website URL format if provided
+        if website is not None and website and not website.startswith(('http://', 'https://')):
+            website = f"https://{website}"
+        
+        with get_conn() as conn, conn.cursor() as cur:
+            # Check if profile columns exist
+            cur.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'users' AND column_name IN ('display_name', 'profile_photo_url', 'bio', 'location', 'website')
+            """)
+            existing_columns = {row[0] for row in cur.fetchall()}
+            
+            if not existing_columns:
+                return jsonify({"error": "Profile columns not available. Please run the database migration (db/schema_user_profile.sql)."}), 400
+            
+            # Build dynamic UPDATE query
+            updates = []
+            params = []
+            
+            # Only add fields that are explicitly provided (not None)
+            if display_name is not None and 'display_name' in existing_columns:
+                updates.append("display_name = %s")
+                params.append(display_name)
+            
+            if profile_photo_url is not None and 'profile_photo_url' in existing_columns:
+                updates.append("profile_photo_url = %s")
+                params.append(profile_photo_url)
+            
+            if bio is not None and 'bio' in existing_columns:
+                updates.append("bio = %s")
+                params.append(bio)
+            
+            if location is not None and 'location' in existing_columns:
+                updates.append("location = %s")
+                params.append(location)
+            
+            if website is not None and 'website' in existing_columns:
+                updates.append("website = %s")
+                params.append(website)
+            
+            if not updates:
+                return jsonify({"error": "No fields to update"}), 400
+            
+            # Always update updated_at
+            updates.append("updated_at = CURRENT_TIMESTAMP")
+            
+            params.append(user_id)
+            
+            # Build RETURNING clause based on available columns
+            returning_cols = ["user_id", "username", "email", "created_at", "updated_at"]
+            if 'display_name' in existing_columns:
+                returning_cols.append("display_name")
+            else:
+                returning_cols.append("NULL as display_name")
+            if 'profile_photo_url' in existing_columns:
+                returning_cols.append("profile_photo_url")
+            else:
+                returning_cols.append("NULL as profile_photo_url")
+            if 'bio' in existing_columns:
+                returning_cols.append("bio")
+            else:
+                returning_cols.append("NULL as bio")
+            if 'location' in existing_columns:
+                returning_cols.append("location")
+            else:
+                returning_cols.append("NULL as location")
+            if 'website' in existing_columns:
+                returning_cols.append("website")
+            else:
+                returning_cols.append("NULL as website")
+            
+            query = f"""
+                UPDATE users 
+                SET {', '.join(updates)}
+                WHERE user_id = %s
+                RETURNING {', '.join(returning_cols)}
+            """
+            
+            cur.execute(query, params)
+            user = cur.fetchone()
+            
+            if not user:
+                return jsonify({"error": "User not found"}), 404
+            
+            conn.commit()
+            
+            return jsonify({
+                "success": True,
+                "user": {
+                    "user_id": user[0],
+                    "username": user[1],
+                    "email": user[2],
+                    "created_at": user[3].isoformat() if user[3] else None,
+                    "updated_at": user[4].isoformat() if user[4] else None,
+                    "display_name": user[5],
+                    "profile_photo_url": user[6],
+                    "bio": user[7],
+                    "location": user[8],
+                    "website": user[9]
+                },
+                "message": "Profile updated successfully"
+            }), 200
+            
+    except Exception as e:
+        app.logger.error(f"Error updating profile: {e}")
+        return jsonify({"error": "Failed to update profile", "details": str(e)}), 500
 
 @app.get("/api/users/stats")
 def get_users_stats():
@@ -2592,6 +2788,16 @@ def get_user_groups():
     
     try:
         with get_conn() as conn, conn.cursor() as cur:
+            # Check if profile columns exist
+            cur.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'users' AND column_name IN ('display_name', 'profile_photo_url')
+            """)
+            existing_columns = {row[0] for row in cur.fetchall()}
+            has_profile_fields = 'display_name' in existing_columns and 'profile_photo_url' in existing_columns
+            
+            # Get groups
             cur.execute("""
                 SELECT g.group_id, g.name, g.description, g.created_by, g.created_at,
                        u.username as creator_username,
@@ -2605,9 +2811,12 @@ def get_user_groups():
             """, (user_id,))
             
             groups = []
+            group_ids = []
             for row in cur.fetchall():
+                group_id = row[0]
+                group_ids.append(group_id)
                 groups.append({
-                    "group_id": row[0],
+                    "group_id": group_id,
                     "name": row[1],
                     "description": row[2],
                     "created_by": row[3],
@@ -2615,8 +2824,54 @@ def get_user_groups():
                     "creator_username": row[5],
                     "your_role": row[6],
                     "joined_at": row[7].isoformat() if row[7] else None,
-                    "member_count": row[8]
+                    "member_count": row[8],
+                    "member_preview": []  # Will be populated below
                 })
+            
+            # Get member previews for all groups
+            if group_ids:
+                if has_profile_fields:
+                    cur.execute("""
+                        SELECT gm.group_id, u.user_id, u.username, 
+                               COALESCE(u.display_name, u.username) as display_name,
+                               u.profile_photo_url
+                        FROM group_members gm
+                        JOIN users u ON gm.user_id = u.user_id
+                        WHERE gm.group_id = ANY(%s)
+                        ORDER BY 
+                            CASE WHEN u.user_id = (SELECT created_by FROM groups WHERE group_id = gm.group_id) THEN 0 ELSE 1 END,
+                            gm.joined_at
+                    """, (group_ids,))
+                else:
+                    cur.execute("""
+                        SELECT gm.group_id, u.user_id, u.username, 
+                               u.username as display_name,
+                               NULL as profile_photo_url
+                        FROM group_members gm
+                        JOIN users u ON gm.user_id = u.user_id
+                        WHERE gm.group_id = ANY(%s)
+                        ORDER BY 
+                            CASE WHEN u.user_id = (SELECT created_by FROM groups WHERE group_id = gm.group_id) THEN 0 ELSE 1 END,
+                            gm.joined_at
+                    """, (group_ids,))
+                
+                # Group members by group_id and limit to 4 per group
+                members_by_group = {}
+                for row in cur.fetchall():
+                    gid, uid, username, display_name, photo_url = row
+                    if gid not in members_by_group:
+                        members_by_group[gid] = []
+                    if len(members_by_group[gid]) < 4:
+                        members_by_group[gid].append({
+                            "user_id": uid,
+                            "username": username,
+                            "display_name": display_name,
+                            "profile_photo_url": photo_url
+                        })
+                
+                # Assign member previews to groups
+                for group in groups:
+                    group["member_preview"] = members_by_group.get(group["group_id"], [])
             
             app.logger.info(f"Successfully retrieved {len(groups)} groups for user {user_id}")
             return jsonify({"success": True, "groups": groups}), 200
@@ -2671,14 +2926,32 @@ def get_group_details(group_id):
                 app.logger.warning(f"Group {group_id} not found")
                 return jsonify({"error": "Group not found"}), 404
             
-            # Get members
-            cur.execute("""
-                SELECT u.user_id, u.username, u.email, gm.role, gm.joined_at
-                FROM group_members gm
-                JOIN users u ON gm.user_id = u.user_id
-                WHERE gm.group_id = %s
-                ORDER BY gm.role DESC, gm.joined_at ASC
-            """, (group_id,))
+            # Get members with profile fields (handle case where columns don't exist)
+            try:
+                cur.execute("""
+                    SELECT u.user_id, u.username, u.email, 
+                           COALESCE(u.display_name, u.username) as display_name,
+                           u.profile_photo_url, gm.role, gm.joined_at
+                    FROM group_members gm
+                    JOIN users u ON gm.user_id = u.user_id
+                    WHERE gm.group_id = %s
+                    ORDER BY gm.role DESC, gm.joined_at ASC
+                """, (group_id,))
+            except Exception as e:
+                # Fallback if profile columns don't exist
+                error_msg = str(e).lower()
+                if 'does not exist' in error_msg or 'undefined_column' in error_msg or 'column' in error_msg:
+                    cur.execute("""
+                        SELECT u.user_id, u.username, u.email, 
+                               u.username as display_name,
+                               NULL as profile_photo_url, gm.role, gm.joined_at
+                        FROM group_members gm
+                        JOIN users u ON gm.user_id = u.user_id
+                        WHERE gm.group_id = %s
+                        ORDER BY gm.role DESC, gm.joined_at ASC
+                    """, (group_id,))
+                else:
+                    raise
             
             members = []
             for row in cur.fetchall():
@@ -2686,8 +2959,10 @@ def get_group_details(group_id):
                     "user_id": row[0],
                     "username": row[1],
                     "email": row[2],
-                    "role": row[3],
-                    "joined_at": row[4].isoformat() if row[4] else None
+                    "display_name": row[3],
+                    "profile_photo_url": row[4],
+                    "role": row[5],
+                    "joined_at": row[6].isoformat() if row[6] else None
                 })
             
             app.logger.info(f"Successfully retrieved details for group {group_id} with {len(members)} members")
@@ -2702,7 +2977,8 @@ def get_group_details(group_id):
                     "creator_username": group_row[5],
                     "your_role": membership[0]
                 },
-                "members": members
+                "members": members,
+                "current_user_id": user_id
             }), 200
             
     except Exception as e:
@@ -2837,6 +3113,137 @@ def remove_group_member(group_id, member_id):
     except Exception as e:
         app.logger.error(f"Error removing group member: {e}")
         return jsonify({"error": "Failed to remove member", "details": str(e)}), 500
+
+@app.route("/api/groups/<int:group_id>/messages", methods=['GET', 'OPTIONS'])
+def get_group_messages(group_id):
+    """Get messages for a group."""
+    if request.method == 'OPTIONS':
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Auth-Token')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response, 200
+    
+    user_id = get_user_id_from_request()
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+    
+    try:
+        with get_conn() as conn, conn.cursor() as cur:
+            # Check if user is a member
+            cur.execute("""
+                SELECT role FROM group_members
+                WHERE group_id = %s AND user_id = %s
+            """, (group_id, user_id))
+            membership = cur.fetchone()
+            
+            if not membership:
+                return jsonify({"error": "You are not a member of this group"}), 403
+            
+            # Get messages with user profile info
+            cur.execute("""
+                SELECT gm.message_id, gm.user_id, gm.message_text, gm.created_at, gm.updated_at, gm.edited,
+                       COALESCE(u.display_name, u.username) as display_name,
+                       u.username, u.profile_photo_url
+                FROM group_messages gm
+                JOIN users u ON gm.user_id = u.user_id
+                WHERE gm.group_id = %s
+                ORDER BY gm.created_at ASC
+                LIMIT 100
+            """, (group_id,))
+            
+            messages = []
+            for row in cur.fetchall():
+                messages.append({
+                    "message_id": row[0],
+                    "user_id": row[1],
+                    "message_text": row[2],
+                    "created_at": row[3].isoformat() if row[3] else None,
+                    "updated_at": row[4].isoformat() if row[4] else None,
+                    "edited": row[5],
+                    "display_name": row[6],
+                    "username": row[7],
+                    "profile_photo_url": row[8]
+                })
+            
+            return jsonify({"success": True, "messages": messages}), 200
+            
+    except Exception as e:
+        app.logger.error(f"Error getting messages for group {group_id}: {e}", exc_info=True)
+        return jsonify({"error": "Failed to get messages", "details": str(e)}), 500
+
+@app.route("/api/groups/<int:group_id>/messages", methods=['POST', 'OPTIONS'])
+def send_group_message(group_id):
+    """Send a message to a group."""
+    if request.method == 'OPTIONS':
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Auth-Token')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response, 200
+    
+    user_id = get_user_id_from_request()
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+    
+    try:
+        data = request.get_json()
+        message_text = data.get("message_text", "").strip()
+        
+        if not message_text:
+            return jsonify({"error": "Message text is required"}), 400
+        
+        if len(message_text) > 5000:
+            return jsonify({"error": "Message text must be 5000 characters or less"}), 400
+        
+        with get_conn() as conn, conn.cursor() as cur:
+            # Check if user is a member
+            cur.execute("""
+                SELECT role FROM group_members
+                WHERE group_id = %s AND user_id = %s
+            """, (group_id, user_id))
+            membership = cur.fetchone()
+            
+            if not membership:
+                return jsonify({"error": "You are not a member of this group"}), 403
+            
+            # Insert message
+            cur.execute("""
+                INSERT INTO group_messages (group_id, user_id, message_text)
+                VALUES (%s, %s, %s)
+                RETURNING message_id, created_at, updated_at, edited
+            """, (group_id, user_id, message_text))
+            
+            result = cur.fetchone()
+            conn.commit()
+            
+            # Get user info for response
+            cur.execute("""
+                SELECT COALESCE(display_name, username) as display_name, username, profile_photo_url
+                FROM users WHERE user_id = %s
+            """, (user_id,))
+            user_info = cur.fetchone()
+            
+            return jsonify({
+                "success": True,
+                "message": {
+                    "message_id": result[0],
+                    "user_id": user_id,
+                    "message_text": message_text,
+                    "created_at": result[1].isoformat() if result[1] else None,
+                    "updated_at": result[2].isoformat() if result[2] else None,
+                    "edited": result[3],
+                    "display_name": user_info[0] if user_info else None,
+                    "username": user_info[1] if user_info else None,
+                    "profile_photo_url": user_info[2] if user_info else None
+                }
+            }), 201
+            
+    except Exception as e:
+        app.logger.error(f"Error sending message to group {group_id}: {e}", exc_info=True)
+        return jsonify({"error": "Failed to send message", "details": str(e)}), 500
 
 @app.route("/api/groups/<int:group_id>/places", methods=['GET', 'OPTIONS'])
 def get_group_places(group_id):
@@ -3088,11 +3495,58 @@ def get_group_route(group_id):
                     "place_type": row[9]
                 })
             
+            # Get may cover places
+            may_cover_places = []
+            try:
+                # Use a savepoint so we can rollback if the table doesn't exist
+                cur.execute("SAVEPOINT may_cover_query")
+                try:
+                    cur.execute("""
+                        SELECT mcp.may_cover_place_id, mcp.place_id,
+                               p.name, p.city, p.state, p.country, p.lat, p.lon,
+                               COALESCE(pwt.place_type, 'unknown') as place_type
+                        FROM may_cover_places mcp
+                        JOIN places p ON mcp.place_id = p.id
+                        LEFT JOIN places_with_types pwt ON p.id = pwt.id
+                        WHERE mcp.route_id = %s AND mcp.route_type = %s
+                        ORDER BY mcp.added_at ASC
+                    """, (route_id, route_type))
+                    
+                    for row in cur.fetchall():
+                        may_cover_places.append({
+                            "may_cover_place_id": row[0],
+                            "place_id": row[1],
+                            "id": row[1],
+                            "name": row[2],
+                            "city": row[3],
+                            "state": row[4],
+                            "country": row[5],
+                            "lat": float(row[6]) if row[6] else None,
+                            "lon": float(row[7]) if row[7] else None,
+                            "place_type": row[8]
+                        })
+                    cur.execute("RELEASE SAVEPOINT may_cover_query")
+                except Exception as e:
+                    # If may_cover_places table doesn't exist yet, rollback to savepoint and continue
+                    error_msg = str(e).lower()
+                    if 'does not exist' in error_msg or 'undefined_table' in error_msg or 'relation' in error_msg:
+                        app.logger.warning(f"may_cover_places table doesn't exist yet: {e}")
+                        cur.execute("ROLLBACK TO SAVEPOINT may_cover_query")
+                        may_cover_places = []
+                    else:
+                        cur.execute("ROLLBACK TO SAVEPOINT may_cover_query")
+                        raise
+            except Exception as e:
+                # Fallback: if savepoint fails, just log and continue with empty list
+                app.logger.warning(f"Error querying may_cover_places: {e}")
+                may_cover_places = []
+            
             return jsonify({
                 "success": True,
                 "route_id": route_id,
                 "route_type": route_type,
-                "places": places
+                "places": places,
+                "may_cover_places": may_cover_places
             }), 200
             
     except Exception as e:
@@ -3120,9 +3574,13 @@ def save_group_route(group_id):
     try:
         data = request.get_json()
         places = data.get("places", [])  # Array of {place_id, order_index}
+        may_cover_places = data.get("may_cover_places", [])  # Array of {place_id}
         
         if not isinstance(places, list):
             return jsonify({"error": "places must be an array"}), 400
+        
+        if not isinstance(may_cover_places, list):
+            return jsonify({"error": "may_cover_places must be an array"}), 400
         
         with get_conn() as conn, conn.cursor() as cur:
             # Check if user is a member
@@ -3216,6 +3674,57 @@ def save_group_route(group_id):
                     INSERT INTO route_places (route_id, route_type, place_id, order_index)
                     VALUES (%s, %s, %s, %s)
                 """, (route_id, route_type, place_id, order_index))
+            
+            # Delete existing may cover places and insert new ones (if table exists)
+            try:
+                # Use savepoint for may_cover_places operations
+                cur.execute("SAVEPOINT may_cover_save")
+                try:
+                    # Delete existing may cover places
+                    cur.execute("""
+                        DELETE FROM may_cover_places
+                        WHERE route_id = %s AND route_type = %s
+                    """, (route_id, route_type))
+                    
+                    # Insert new may cover places
+                    for place_data in may_cover_places:
+                        place_id = place_data.get("place_id")
+                        
+                        if not place_id:
+                            continue
+                        
+                        # Verify place exists
+                        cur.execute("SELECT id FROM places WHERE id = %s", (place_id,))
+                        if not cur.fetchone():
+                            continue
+                        
+                        # Check if already in route places (don't add duplicates)
+                        cur.execute("""
+                            SELECT route_place_id FROM route_places
+                            WHERE route_id = %s AND route_type = %s AND place_id = %s
+                        """, (route_id, route_type, place_id))
+                        if cur.fetchone():
+                            continue  # Skip if already in route
+                        
+                        cur.execute("""
+                            INSERT INTO may_cover_places (route_id, route_type, place_id)
+                            VALUES (%s, %s, %s)
+                            ON CONFLICT (route_id, route_type, place_id) DO NOTHING
+                        """, (route_id, route_type, place_id))
+                    
+                    cur.execute("RELEASE SAVEPOINT may_cover_save")
+                except Exception as e:
+                    # If may_cover_places table doesn't exist yet, rollback to savepoint and continue
+                    error_msg = str(e).lower()
+                    if 'does not exist' in error_msg or 'undefined_table' in error_msg or 'relation' in error_msg:
+                        app.logger.warning(f"may_cover_places table doesn't exist yet: {e}")
+                        cur.execute("ROLLBACK TO SAVEPOINT may_cover_save")
+                    else:
+                        cur.execute("ROLLBACK TO SAVEPOINT may_cover_save")
+                        raise
+            except Exception as e:
+                # Fallback: if savepoint fails, just log and continue (table doesn't exist)
+                app.logger.warning(f"Error saving may_cover_places: {e}")
             
             conn.commit()
             
@@ -3559,6 +4068,16 @@ def delete_place(place_id):
         return jsonify({"error": "Failed to delete place", "details": str(e)}), 500
 
 # CRITICAL FIX: Global error handlers with Sentry integration
+@app.errorhandler(RateLimitExceeded)
+def handle_rate_limit(e):
+    """Handle rate limit exceeded errors properly."""
+    response = jsonify({
+        "error": "Rate limit exceeded",
+        "message": str(e.description) if hasattr(e, 'description') else "Too many requests. Please try again later."
+    })
+    response.status_code = 429
+    return response
+
 @app.errorhandler(404)
 def not_found(error):
     """Handle 404 errors."""
@@ -3590,6 +4109,16 @@ def internal_error(error):
 def handle_exception(e):
     """Global exception handler - catches all unhandled exceptions."""
     from flask import has_request_context
+    
+    # Handle RateLimitExceeded separately (should be caught by specific handler, but just in case)
+    if isinstance(e, RateLimitExceeded):
+        response = jsonify({
+            "error": "Rate limit exceeded",
+            "message": str(e.description) if hasattr(e, 'description') else "Too many requests. Please try again later."
+        })
+        response.status_code = 429
+        return response
+    
     # Skip error handling for OPTIONS requests - return proper CORS response
     if has_request_context() and request.method == 'OPTIONS':
         from flask import Response
@@ -3632,6 +4161,6 @@ except ImportError:
     pass
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000))
+    port = int(os.getenv("PORT", 5001))  # Changed default to 5001 to match frontend
     host = os.getenv("HOST", "localhost")  # Use localhost instead of 127.0.0.1 for cookie compatibility
     app.run(host=host, port=port, debug=True)

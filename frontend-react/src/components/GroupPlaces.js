@@ -26,12 +26,20 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState(null);
   const [routeChanged, setRouteChanged] = useState(false);
+  const [mayCoverChanged, setMayCoverChanged] = useState(false); // Track if may cover places have changed
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [showRoutePlanner, setShowRoutePlanner] = useState(true); // Show by default
   const [routeShownOnMap, setRouteShownOnMap] = useState(true); // Auto-show on map when places added
   const [showAvailablePlaces, setShowAvailablePlaces] = useState(true); // Show available places to add
   const [routeMap, setRouteMap] = useState(null); // Map instance for route planner
   const [mapsLoaded, setMapsLoaded] = useState(false); // Track if Google Maps API is loaded
+  const [showMarkersOnMap, setShowMarkersOnMap] = useState(false); // Track whether to show markers on map
+  const [routeHasChanges, setRouteHasChanges] = useState(false); // Track if route has been modified since last marker update
+  const [mayCoverPlaces, setMayCoverPlaces] = useState([]); // Places that may be covered (second list in route planner)
+  const [showMayCoverPlaces, setShowMayCoverPlaces] = useState(true); // Toggle for showing/hiding may cover places section
+  const [draggedMayCoverIndex, setDraggedMayCoverIndex] = useState(null); // Track dragged item in may cover places
+  const [draggedMayCoverPlace, setDraggedMayCoverPlace] = useState(null); // Track dragged place from may cover to route
+  const [draggedRoutePlace, setDraggedRoutePlace] = useState(null); // Track dragged place from route to may cover
   const routePolylineRef = useRef(null); // Reference to polyline for cleanup
 
   useEffect(() => {
@@ -47,16 +55,76 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
     setRouteLoading(true);
     setRouteError(null);
     try {
-      const response = await getGroupRoute(groupId);
-      if (response && response.success) {
-        setRoutePlaces(response.places || []);
+      const routeData = await getGroupRoute(groupId);
+      console.log('🔍 Route API response:', JSON.stringify(routeData, null, 2));
+      if (routeData && routeData.success && routeData.places) {
+        const places = routeData.places
+          // Ensure each place has an order_index and all required fields
+          .map((place, idx) => {
+            const processedPlace = {
+              ...place,
+              place_id: place.place_id || place.id,
+              order_index: place.order_index != null ? place.order_index : idx,
+              name: place.name || 'Unknown',
+              city: place.city || '',
+              state: place.state || '',
+              country: place.country || '',
+              place_type: place.place_type || 'unknown',
+              // Ensure coordinates are numbers, not strings
+              lat: place.lat != null ? (typeof place.lat === 'number' ? place.lat : parseFloat(place.lat)) : null,
+              lon: place.lon != null ? (typeof place.lon === 'number' ? place.lon : parseFloat(place.lon)) : null
+            };
+            console.log(`📦 Processed place ${idx + 1}:`, {
+              place_id: processedPlace.place_id,
+              name: processedPlace.name,
+              lat: processedPlace.lat,
+              lon: processedPlace.lon,
+              latType: typeof processedPlace.lat,
+              lonType: typeof processedPlace.lon,
+              isValid: !isNaN(processedPlace.lat) && !isNaN(processedPlace.lon) && isFinite(processedPlace.lat) && isFinite(processedPlace.lon)
+            });
+            return processedPlace;
+          })
+          // Sort by order_index to ensure correct display order
+          .sort((a, b) => {
+            const orderA = a.order_index != null ? a.order_index : 0;
+            const orderB = b.order_index != null ? b.order_index : 0;
+            return orderA - orderB;
+          });
+        console.log('✅ Final processed route places:', places);
+        console.log('📍 Places with valid coordinates:', places.filter(p => p.lat != null && p.lon != null && !isNaN(p.lat) && !isNaN(p.lon) && isFinite(p.lat) && isFinite(p.lon)).length);
+        setRoutePlaces(places);
+        
+        // Load may cover places if available
+        if (routeData.may_cover_places && Array.isArray(routeData.may_cover_places)) {
+          const processedMayCover = routeData.may_cover_places.map(mcp => ({
+            place_id: mcp.place_id || mcp.id,
+            id: mcp.place_id || mcp.id,
+            name: mcp.name || 'Unknown',
+            city: mcp.city || '',
+            state: mcp.state || '',
+            country: mcp.country || '',
+            lat: mcp.lat != null ? parseFloat(mcp.lat) : null,
+            lon: mcp.lon != null ? parseFloat(mcp.lon) : null,
+            place_type: mcp.place_type || 'unknown'
+          }));
+          setMayCoverPlaces(processedMayCover);
+        } else {
+          setMayCoverPlaces([]);
+        }
+        
         setRouteChanged(false);
+        setMayCoverChanged(false); // Reset when loading route
       } else {
+        console.log('ℹ️ No route found or empty places array');
         // If no route exists, initialize with empty array
         setRoutePlaces([]);
+        setMayCoverPlaces([]);
         setRouteChanged(false);
+        setMayCoverChanged(false);
       }
     } catch (err) {
+      console.error('❌ Error loading route:', err);
       // Silently handle errors - route may not exist yet, which is fine
       // Only show error if it's not a 404 (which means route doesn't exist yet)
       if (err.status !== 404 && err.message && !err.message.includes('not found')) {
@@ -64,7 +132,9 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
       } else {
         // Route doesn't exist yet - this is normal for new groups
         setRoutePlaces([]);
+        setMayCoverPlaces([]);
         setRouteChanged(false);
+        setMayCoverChanged(false);
       }
     } finally {
       setRouteLoading(false);
@@ -97,6 +167,7 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
     const newRoutePlaces = [...routePlaces, newRoutePlace];
     setRoutePlaces(newRoutePlaces);
     setRouteChanged(true);
+    setRouteHasChanges(true); // Mark route as changed for button state
     
     // Automatically show on map when first place is added
     if (routePlaces.length === 0) {
@@ -107,17 +178,53 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
   const handleRemoveFromRoute = (placeId) => {
     const newPlaces = routePlaces
       .filter(rp => rp.place_id !== placeId)
-      .map((rp, idx) => ({ ...rp, order_index: idx }));
+      .map((rp, idx) => ({ ...rp, order_index: idx }))
+      // Sort by order_index to ensure correct display order
+      .sort((a, b) => {
+        const orderA = a.order_index != null ? a.order_index : 0;
+        const orderB = b.order_index != null ? b.order_index : 0;
+        return orderA - orderB;
+      });
     setRoutePlaces(newPlaces);
     setRouteChanged(true);
+    setRouteHasChanges(true); // Mark route as changed for button state
   };
   
-  const handleDragStart = (index) => {
+  const handleDragStart = (e, index) => {
+    e.stopPropagation();
+    const place = routePlaces[index];
     setDraggedIndex(index);
+    setDraggedRoutePlace({ place, index, source: 'route' }); // Mark as coming from route
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', e.currentTarget);
   };
   
   const handleDragOver = (e, index) => {
     e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedIndex !== null && draggedIndex !== index) {
+      e.currentTarget.style.borderColor = '#6366f1';
+      e.currentTarget.style.background = '#f0f9ff';
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (draggedIndex !== null) {
+      e.currentTarget.style.borderColor = '#e5e7eb';
+      e.currentTarget.style.background = '#ffffff';
+    }
+  };
+
+  const handleDragEnd = (e) => {
+    e.preventDefault();
+    // Only reset if not dropping on may cover (may cover drop handler will reset it)
+    if (!draggedRoutePlace || draggedRoutePlace.source !== 'route') {
+      setDraggedIndex(null);
+      setDraggedRoutePlace(null);
+    }
   };
   
   const handleDrop = (e, dropIndex) => {
@@ -144,7 +251,179 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
     
     setRoutePlaces(reordered);
     setRouteChanged(true);
+    setRouteHasChanges(true); // Mark route as changed for button state
     setDraggedIndex(null);
+  };
+  
+  // Handle drag and drop for may cover places
+  const handleDragStartMayCover = (e, index) => {
+    e.stopPropagation();
+    const place = mayCoverPlaces[index];
+    setDraggedMayCoverIndex(index);
+    setDraggedMayCoverPlace({ place, index, source: 'mayCover' }); // Mark as coming from may cover
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', e.currentTarget);
+  };
+
+  const handleDragOverMayCover = (e, index) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedMayCoverIndex !== null && draggedMayCoverIndex !== index) {
+      e.currentTarget.style.borderColor = '#10b981';
+      e.currentTarget.style.background = '#f0fdf4';
+    }
+  };
+
+  const handleDragLeaveMayCover = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.style.borderColor = '#e5e7eb';
+    e.currentTarget.style.background = '#ffffff';
+  };
+
+  const handleDropMayCover = (e, dropIndex) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (draggedMayCoverIndex === null || draggedMayCoverIndex === dropIndex) {
+      setDraggedMayCoverIndex(null);
+      return;
+    }
+    
+    const reordered = [...mayCoverPlaces];
+    const [draggedItem] = reordered.splice(draggedMayCoverIndex, 1);
+    reordered.splice(dropIndex, 0, draggedItem);
+    
+    setMayCoverPlaces(reordered);
+    setMayCoverChanged(true); // Mark may cover as changed
+    setDraggedMayCoverIndex(null);
+  };
+
+  const handleDragEndMayCover = (e) => {
+    e.preventDefault();
+    // Only reset if not dropping on route (route drop handler will reset it)
+    if (!draggedMayCoverPlace || draggedMayCoverPlace.source !== 'mayCover') {
+      setDraggedMayCoverIndex(null);
+      setDraggedMayCoverPlace(null);
+    }
+  };
+
+  // Handle dropping route place into may cover places
+  const handleDropRouteToMayCover = (e, dropIndex) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!draggedRoutePlace) return;
+    
+    const place = draggedRoutePlace.place;
+    
+    // Check if already in may cover
+    if (mayCoverPlaces.some(mp => (mp.place_id || mp.id) === (place.place_id || place.id))) {
+      setDraggedRoutePlace(null);
+      setDraggedIndex(null);
+      return;
+    }
+    
+    // Validate coordinates
+    if (!place.lat || !place.lon) {
+      setDraggedRoutePlace(null);
+      setDraggedIndex(null);
+      return;
+    }
+    
+    const newMayCoverPlace = {
+      place_id: place.place_id || place.id,
+      id: place.place_id || place.id,
+      name: place.name || 'Unknown',
+      city: place.city || '',
+      state: place.state || '',
+      country: place.country || '',
+      lat: typeof place.lat === 'number' ? place.lat : parseFloat(place.lat),
+      lon: typeof place.lon === 'number' ? place.lon : parseFloat(place.lon),
+      place_type: place.place_type || 'unknown'
+    };
+    
+    // Insert at drop position in may cover
+    const newMayCoverPlaces = [...mayCoverPlaces];
+    newMayCoverPlaces.splice(dropIndex, 0, newMayCoverPlace);
+    setMayCoverPlaces(newMayCoverPlaces);
+    setMayCoverChanged(true); // Mark may cover as changed
+    
+    // Remove from route places
+    const newRoutePlaces = routePlaces.filter((rp, idx) => idx !== draggedRoutePlace.index);
+    // Update order indices
+    const reordered = newRoutePlaces.map((rp, idx) => ({
+      ...rp,
+      order_index: idx
+    }));
+    
+    setRoutePlaces(reordered);
+    setRouteChanged(true);
+    setRouteHasChanges(true); // Mark route as changed for button state
+    
+    // Reset drag state
+    setDraggedRoutePlace(null);
+    setDraggedIndex(null);
+  };
+
+  // Handle dropping may cover place into route
+  const handleDropMayCoverToRoute = (e, dropIndex) => {
+    e.preventDefault();
+    if (!draggedMayCoverPlace) return;
+    
+    const place = draggedMayCoverPlace.place;
+    
+    // Check if already in route
+    if (routePlaces.some(rp => rp.place_id === (place.place_id || place.id))) {
+      setDraggedMayCoverPlace(null);
+      setDraggedMayCoverIndex(null);
+      return;
+    }
+    
+    // Validate coordinates
+    if (!place.lat || !place.lon) {
+      setDraggedMayCoverPlace(null);
+      setDraggedMayCoverIndex(null);
+      return;
+    }
+    
+    const newRoutePlace = {
+      place_id: place.place_id || place.id,
+      name: place.name || 'Unknown',
+      city: place.city || '',
+      state: place.state || '',
+      country: place.country || '',
+      lat: typeof place.lat === 'number' ? place.lat : parseFloat(place.lat),
+      lon: typeof place.lon === 'number' ? place.lon : parseFloat(place.lon),
+      place_type: place.place_type || 'unknown',
+      order_index: dropIndex
+    };
+    
+    // Insert at drop position
+    const newPlaces = [...routePlaces];
+    newPlaces.splice(dropIndex, 0, newRoutePlace);
+    
+    // Update order indices
+    const reordered = newPlaces.map((rp, idx) => ({
+      ...rp,
+      order_index: idx
+    }));
+    
+    setRoutePlaces(reordered);
+    setRouteChanged(true);
+    setRouteHasChanges(true); // Mark route as changed for button state
+    
+    // Remove from may cover places
+    setMayCoverPlaces(mayCoverPlaces.filter((mp, idx) => idx !== draggedMayCoverPlace.index));
+    setMayCoverChanged(true); // Mark may cover as changed
+    
+    // Reset drag state
+    setDraggedMayCoverPlace(null);
+    setDraggedMayCoverIndex(null);
+    
+    // Automatically show on map when first place is added
+    if (routePlaces.length === 0) {
+      setRouteShownOnMap(true);
+    }
   };
   
   // Handle drag from available places to route
@@ -196,6 +475,7 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
     
     setRoutePlaces(reordered);
     setRouteChanged(true);
+    setRouteHasChanges(true); // Mark route as changed for button state
     setDraggedAvailablePlace(null);
     
     // Automatically show on map when first place is added
@@ -214,8 +494,13 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
         order_index: idx
       }));
       
-      await saveGroupRoute(groupId, placesPayload, false); // User customization
+      const mayCoverPayload = mayCoverPlaces.map((mp) => ({
+        place_id: mp.place_id || mp.id
+      }));
+      
+      await saveGroupRoute(groupId, placesPayload, false, mayCoverPayload); // User customization
       setRouteChanged(false);
+      setMayCoverChanged(false);
     } catch (err) {
       setRouteError(err.message || 'Failed to save route');
     } finally {
@@ -258,22 +543,91 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
     }
   };
   
-  // Update map bounds when route places change
+  // Update map bounds when route places change or when returning to route planner view
   useEffect(() => {
-    if (!routeMap || routePlaces.length === 0) return;
+    if (!showRoutePlanner || !routeMap) return;
     
-    const validPlaces = routePlaces.filter(rp => rp.lat && rp.lon);
-    if (validPlaces.length === 0) return;
+    if (routePlaces.length === 0) return;
     
-    const bounds = new window.google.maps.LatLngBounds();
-    validPlaces.forEach(rp => {
-      bounds.extend({ lat: rp.lat, lng: rp.lon });
+    const validPlaces = routePlaces.filter(rp => {
+      const lat = rp.lat != null ? (typeof rp.lat === 'number' ? rp.lat : parseFloat(rp.lat)) : null;
+      const lon = rp.lon != null ? (typeof rp.lon === 'number' ? rp.lon : parseFloat(rp.lon)) : null;
+      return lat != null && lon != null && !isNaN(lat) && !isNaN(lon) && isFinite(lat) && isFinite(lon);
     });
     
-    if (!bounds.isEmpty()) {
-      routeMap.fitBounds(bounds, { padding: 80 });
+    if (validPlaces.length === 0) {
+      console.warn('⚠️ No valid places with coordinates to fit bounds');
+      return;
     }
-  }, [routePlaces, routeMap]);
+    
+    try {
+      const bounds = new window.google.maps.LatLngBounds();
+      validPlaces.forEach(rp => {
+        const lat = typeof rp.lat === 'number' ? rp.lat : parseFloat(rp.lat);
+        const lon = typeof rp.lon === 'number' ? rp.lon : parseFloat(rp.lon);
+        if (!isNaN(lat) && !isNaN(lon) && isFinite(lat) && isFinite(lon)) {
+          bounds.extend({ lat, lng: lon });
+        }
+      });
+      
+      if (!bounds.isEmpty()) {
+        console.log('🗺️ Fitting bounds to route places');
+        routeMap.fitBounds(bounds, { padding: 80 });
+      }
+    } catch (error) {
+      console.error('❌ Error updating map bounds:', error);
+    }
+  }, [routePlaces, routeMap, showRoutePlanner]);
+  
+  // Log route places when they change and prepare valid markers
+  useEffect(() => {
+    if (showRoutePlanner) {
+      console.log('🔄 Route places updated:', routePlaces);
+      const validPlaces = routePlaces.filter(rp => {
+        const lat = rp.lat != null ? (typeof rp.lat === 'number' ? rp.lat : parseFloat(rp.lat)) : null;
+        const lon = rp.lon != null ? (typeof rp.lon === 'number' ? rp.lon : parseFloat(rp.lon)) : null;
+        return lat != null && lon != null && !isNaN(lat) && !isNaN(lon) && isFinite(lat) && isFinite(lon);
+      });
+      console.log('📍 Places with valid coordinates:', validPlaces.length, 'out of', routePlaces.length);
+      if (validPlaces.length > 0) {
+        console.log('📍 Valid places details:', validPlaces.map((rp, idx) => ({
+          index: idx + 1,
+          name: rp.name,
+          lat: rp.lat,
+          lon: rp.lon,
+          place_id: rp.place_id
+        })));
+      }
+    }
+  }, [routePlaces, showRoutePlanner]);
+  
+  // Memoize valid route places for marker rendering
+  const validRoutePlacesForMarkers = useMemo(() => {
+    if (!showRoutePlanner || routePlaces.length === 0) return [];
+    
+    return routePlaces.filter((rp) => {
+      const lat = rp.lat != null ? (typeof rp.lat === 'number' ? rp.lat : parseFloat(rp.lat)) : null;
+      const lon = rp.lon != null ? (typeof rp.lon === 'number' ? rp.lon : parseFloat(rp.lon)) : null;
+      return lat != null && lon != null && !isNaN(lat) && !isNaN(lon) && isFinite(lat) && isFinite(lon);
+    });
+  }, [routePlaces, showRoutePlanner]);
+  
+  // Reset showMarkersOnMap and routeHasChanges when route places are cleared
+  useEffect(() => {
+    if (routePlaces.length === 0) {
+      setShowMarkersOnMap(false);
+      setRouteHasChanges(false);
+    }
+  }, [routePlaces.length]);
+  
+  // Reset button state when entering route planner view
+  useEffect(() => {
+    if (showRoutePlanner) {
+      // Always reset to "Show on Map" state when entering route planner
+      setShowMarkersOnMap(false);
+      setRouteHasChanges(false);
+    }
+  }, [showRoutePlanner]);
 
   // Listen for place list updates and refresh
   useEffect(() => {
@@ -519,12 +873,12 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
               fontFamily: 'inherit'
             }}>
               <span
-                onClick={onBack}
-                style={{
+              onClick={onBack}
+              style={{
                   color: '#000000',
                   fontSize: '14px',
                   fontWeight: '400',
-                  cursor: 'pointer',
+                cursor: 'pointer',
                   padding: '0',
                   transition: 'text-decoration 0.2s ease',
                   textDecoration: 'none',
@@ -532,17 +886,17 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                   border: 'none',
                   outline: 'none',
                   whiteSpace: 'nowrap'
-                }}
-                onMouseEnter={(e) => {
+              }}
+              onMouseEnter={(e) => {
                   e.target.style.textDecoration = 'underline';
-                }}
-                onMouseLeave={(e) => {
+              }}
+              onMouseLeave={(e) => {
                   e.target.style.textDecoration = 'none';
-                }}
-              >
+              }}
+            >
                 Groups
               </span>
-              {group && (
+            {group && (
                 <>
                   <span style={{ color: '#9ca3af', fontSize: '14px' }}>›</span>
                   <span
@@ -558,8 +912,8 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                       background: 'none',
                       border: 'none',
                       outline: 'none',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
                       maxWidth: '200px'
                     }}
@@ -570,7 +924,7 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                       e.target.style.textDecoration = 'none';
                     }}
                   >
-                    {group.name}
+                  {group.name}
                   </span>
                   <span style={{ color: '#9ca3af', fontSize: '14px' }}>›</span>
                   <span style={{ color: '#000000', fontSize: '14px', fontWeight: '400' }}>
@@ -588,7 +942,15 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
             marginLeft: '16px'
           }}>
             <button
-              onClick={() => setShowRoutePlanner(!showRoutePlanner)}
+              onClick={() => {
+                const newValue = !showRoutePlanner;
+                setShowRoutePlanner(newValue);
+                // Reset button state when entering route planner
+                if (newValue) {
+                  setShowMarkersOnMap(false);
+                  setRouteHasChanges(false);
+                }
+              }}
               title={showRoutePlanner ? "Show places list" : "Show route planner"}
               style={{
                 padding: '8px 14px',
@@ -697,7 +1059,7 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
           🗺️
         </button>
           </div>
-        </div>
+      </div>
 
         {/* Stats Bar */}
         {places.length > 0 && (
@@ -763,13 +1125,14 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
         display: 'flex',
         flexDirection: 'row',
         overflow: 'hidden',
-        background: 'transparent'
+        background: 'transparent',
+        position: 'relative'
       }}>
         {/* Left Panel - Route Places and Available Places */}
         <div style={{
           width: '50%',
-          display: 'flex',
-          flexDirection: 'column',
+        display: 'flex',
+        flexDirection: 'column',
           borderRight: '2px solid rgba(229, 231, 235, 0.8)',
           background: 'rgba(255, 255, 255, 0.98)',
           backdropFilter: 'blur(8px)',
@@ -780,14 +1143,14 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
             padding: '16px 20px',
             borderBottom: '1px solid #e5e7eb',
             background: '#f9fafb',
-            flexShrink: 0
-          }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
+          flexShrink: 0
+        }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
               justifyContent: 'space-between',
               marginBottom: '12px'
-            }}>
+              }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <h3 style={{
                   margin: 0,
@@ -802,7 +1165,7 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                   <span>Route Planner</span>
                 </h3>
                 {routePlaces.length > 0 && (
-                  <span style={{
+              <span style={{
                     padding: '4px 10px',
                     background: '#6366f1',
                     color: 'white',
@@ -811,15 +1174,15 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                     fontWeight: '600'
                   }}>
                     {routePlaces.length}
-                  </span>
+              </span>
                 )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {routeChanged && (
-                  <button
+                {(routeChanged || mayCoverChanged) && (
+            <button
                     onClick={handleSaveRoute}
                     disabled={routeLoading}
-                    style={{
+              style={{
                       padding: '6px 12px',
                       background: routeLoading ? '#9ca3af' : '#10b981',
                       color: 'white',
@@ -832,7 +1195,7 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                     }}
                   >
                     {routeLoading ? 'Saving...' : '💾 Save'}
-                  </button>
+            </button>
                 )}
               </div>
             </div>
@@ -851,19 +1214,25 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
           </div>
           
           {/* Route Places List - Scrollable */}
-          <div style={{
+                <div style={{
             flex: 1,
             overflowY: 'auto',
             padding: '16px',
-            display: 'flex',
+                  display: 'flex',
             flexDirection: 'column',
             gap: '8px'
           }}
-          onDragOver={(e) => e.preventDefault()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (draggedMayCoverPlace || draggedAvailablePlace) {
+              e.dataTransfer.dropEffect = 'move';
+            }
+          }}
           onDrop={(e) => {
             e.preventDefault();
-            if (draggedAvailablePlace && routePlaces.length === 0) {
-              // Add to empty route
+            if (draggedMayCoverPlace && routePlaces.length === 0) {
+              handleDropMayCoverToRoute(e, 0);
+            } else if (draggedAvailablePlace && routePlaces.length === 0) {
               handleDropOnRoute(e, 0);
             }
           }}
@@ -876,17 +1245,30 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                   color: '#6b7280',
                   border: '2px dashed #d1d5db',
                   borderRadius: '12px',
-                  background: '#f9fafb',
+                background: '#f9fafb',
                   transition: 'all 0.2s ease'
                 }}
                 onDragOver={(e) => {
                   e.preventDefault();
-                  e.currentTarget.style.borderColor = '#6366f1';
-                  e.currentTarget.style.background = '#f0f9ff';
+                  e.stopPropagation();
+                  if (draggedMayCoverPlace || draggedAvailablePlace) {
+                    e.currentTarget.style.borderColor = '#6366f1';
+                    e.currentTarget.style.background = '#f0f9ff';
+                  }
                 }}
                 onDragLeave={(e) => {
+                  e.preventDefault();
                   e.currentTarget.style.borderColor = '#d1d5db';
                   e.currentTarget.style.background = '#f9fafb';
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (draggedMayCoverPlace) {
+                    handleDropMayCoverToRoute(e, routePlaces.length);
+                  } else if (draggedAvailablePlace) {
+                    handleDropOnRoute(e, routePlaces.length);
+                  }
                 }}
               >
                 <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>📍</div>
@@ -899,74 +1281,88 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
               </div>
             ) : (
               <>
-                {routePlaces.map((routePlace, index) => (
+                {/* Display route places in order (they should already be sorted by order_index) */}
+                {[...routePlaces]
+                  .sort((a, b) => {
+                    const orderA = a.order_index != null ? a.order_index : 0;
+                    const orderB = b.order_index != null ? b.order_index : 0;
+                    return orderA - orderB;
+                  })
+                  .map((routePlace, index) => (
                 <div
-                  key={`${routePlace.place_id}-${index}`}
+                  key={`${routePlace.place_id || routePlace.placeId || index}-${index}`}
                   draggable
-                  onDragStart={() => handleDragStart(index)}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    handleDragOver(e, index);
-                  }}
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDragLeave={(e) => handleDragLeave(e)}
+                  onDragEnd={(e) => handleDragEnd(e)}
                   onDrop={(e) => {
                     e.preventDefault();
-                    if (draggedAvailablePlace) {
+                    e.stopPropagation();
+                    if (draggedMayCoverPlace) {
+                      handleDropMayCoverToRoute(e, index);
+                    } else if (draggedAvailablePlace) {
                       handleDropOnRoute(e, index);
                     } else {
                       handleDrop(e, index);
                     }
                   }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
+                        style={{
+                  display: 'flex',
+                  alignItems: 'center',
                     gap: '12px',
-                    padding: '12px',
-                    background: draggedIndex === index ? '#f3f4f6' : '#f9fafb',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px',
+                    padding: '12px 14px',
+                    background: draggedIndex === index ? '#f3f4f6' : '#ffffff',
+                    border: '2px solid',
+                    borderColor: draggedIndex === index ? '#d1d5db' : '#e5e7eb',
+                    borderRadius: '12px',
                     cursor: 'move',
                     transition: 'all 0.2s ease',
-                    opacity: draggedIndex === index ? 0.5 : 1
-                  }}
-                  onMouseEnter={(e) => {
-                    if (draggedIndex !== index) {
-                      e.currentTarget.style.background = '#f3f4f6';
-                      e.currentTarget.style.borderColor = '#d1d5db';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
+                    opacity: draggedIndex === index ? 0.5 : 1,
+                    boxShadow: draggedIndex === index ? 'none' : '0 1px 3px rgba(0, 0, 0, 0.1)'
+                        }}
+                        onMouseEnter={(e) => {
                     if (draggedIndex !== index) {
                       e.currentTarget.style.background = '#f9fafb';
-                      e.currentTarget.style.borderColor = '#e5e7eb';
+                      e.currentTarget.style.borderColor = '#d1d5db';
+                      e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.12)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                    if (draggedIndex !== index) {
+                      e.currentTarget.style.background = '#ffffff';
+                            e.currentTarget.style.borderColor = '#e5e7eb';
+                      e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)';
                     }
                   }}
                 >
                   <div style={{
-                    width: '32px',
-                    height: '32px',
+                    width: '36px',
+                    height: '36px',
                     background: '#6366f1',
                     color: 'white',
-                    borderRadius: '50%',
+                    borderRadius: '10px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     fontSize: '0.875rem',
                     fontWeight: '700',
-                    flexShrink: 0
+                    flexShrink: 0,
+                    boxShadow: '0 2px 4px rgba(99, 102, 241, 0.3)'
                   }}>
                     {index + 1}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{
                       fontSize: '0.9375rem',
-                      fontWeight: '600',
+                      fontWeight: '700',
                       color: '#111827',
                       marginBottom: '4px',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap'
                     }}>
-                      {routePlace.name}
+                      {routePlace.name || 'Unknown Place'}
                     </div>
                     <div style={{
                       fontSize: '0.8125rem',
@@ -975,36 +1371,45 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap'
                     }}>
-                      {[routePlace.city, routePlace.state, routePlace.country].filter(Boolean).join(', ')}
+                      {[routePlace.city, routePlace.state, routePlace.country].filter(Boolean).join(', ') || 'Location unknown'}
                     </div>
                   </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRemoveFromRoute(routePlace.place_id);
-                    }}
-                    style={{
-                      padding: '6px',
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveFromRoute(routePlace.place_id || routePlace.placeId);
+                        }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onDragStart={(e) => e.stopPropagation()}
+                        style={{
+                      padding: '6px 8px',
                       background: 'transparent',
-                      border: 'none',
+                border: 'none',
                       color: '#ef4444',
-                      cursor: 'pointer',
+                cursor: 'pointer',
                       fontSize: '1.25rem',
                       lineHeight: '1',
-                      borderRadius: '4px',
+                      borderRadius: '6px',
                       transition: 'all 0.15s ease',
-                      flexShrink: 0
-                    }}
-                    onMouseEnter={(e) => {
+                      flexShrink: 0,
+                      width: '28px',
+                      height: '28px',
+                display: 'flex',
+                alignItems: 'center',
+                      justifyContent: 'center'
+              }}
+              onMouseEnter={(e) => {
                       e.target.style.background = '#fee2e2';
-                    }}
-                    onMouseLeave={(e) => {
+                      e.target.style.color = '#dc2626';
+              }}
+              onMouseLeave={(e) => {
                       e.target.style.background = 'transparent';
-                    }}
+                      e.target.style.color = '#ef4444';
+                }}
                     title="Remove from route"
-                  >
+              >
                     ×
-                  </button>
+              </button>
                 </div>
               ))}
                 {/* Drop zone at end of route */}
@@ -1020,11 +1425,20 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                   }}
                   onDrop={(e) => {
                     e.preventDefault();
-                    if (draggedAvailablePlace) {
+                    if (draggedMayCoverPlace) {
+                      handleDropMayCoverToRoute(e, routePlaces.length);
+                    } else if (draggedAvailablePlace) {
                       handleDropOnRoute(e, routePlaces.length);
                     }
                     e.currentTarget.style.borderColor = 'transparent';
                     e.currentTarget.style.background = 'transparent';
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (draggedMayCoverPlace || draggedAvailablePlace) {
+                      e.currentTarget.style.borderColor = '#6366f1';
+                      e.currentTarget.style.background = '#f0f9ff';
+                    }
                   }}
                   style={{
                     minHeight: '60px',
@@ -1039,105 +1453,177 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                   }}
                 >
                   {draggedAvailablePlace ? 'Drop here to add to end of route' : ''}
-                </div>
+                  </div>
               </>
             )}
           </div>
-          
-          {/* Available Places Section - Toggleable */}
-          <div style={{
-            borderTop: '1px solid #e5e7eb',
-            background: '#f9fafb',
-            flexShrink: 0
-          }}>
-            <button
-              onClick={() => setShowAvailablePlaces(!showAvailablePlaces)}
-              style={{
-                width: '100%',
+
+          {/* May Cover Places Section - Second list in left panel */}
+          {mayCoverPlaces.length > 0 && (
+            <div style={{
+              borderTop: '2px solid #e5e7eb',
+              background: '#f9fafb',
+              flexShrink: 0,
+              maxHeight: '40%',
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
+              <div style={{
                 padding: '12px 16px',
-                background: 'transparent',
-                border: 'none',
+                background: 'white',
+                borderBottom: '1px solid #e5e7eb',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-                fontWeight: '700',
-                color: '#374151'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = '#f3f4f6';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-              }}
-            >
-              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>📋</span>
-                <span>Available Places ({availablePlaces.length})</span>
-              </span>
-              <span>{showAvailablePlaces ? '▼' : '▲'}</span>
-            </button>
-            
-            {showAvailablePlaces && (
+                flexShrink: 0
+              }}>
               <div style={{
-                maxHeight: '300px',
-                overflowY: 'auto',
-                padding: '12px 16px',
                 display: 'flex',
-                flexDirection: 'column',
+                alignItems: 'center',
                 gap: '8px'
               }}>
-                {availablePlaces.length === 0 ? (
-                  <div style={{
-                    textAlign: 'center',
-                    padding: '20px',
-                    color: '#9ca3af',
-                    fontSize: '0.8125rem'
+                  <span style={{ fontSize: '1.125rem' }}>📍</span>
+                <h3 style={{
+                  margin: 0,
+                    fontSize: '0.9375rem',
+                  fontWeight: '700',
+                  color: '#111827'
+                }}>
+                    May Cover Places
+                </h3>
+              <span style={{
+                    padding: '2px 8px',
+                    background: '#e0f2fe',
+                    color: '#0369a1',
+                    borderRadius: '12px',
+                    fontSize: '0.75rem',
+                    fontWeight: '700'
                   }}>
-                    All places are in your route
-                  </div>
-                ) : (
-                  availablePlaces.map((place, index) => (
+                    {mayCoverPlaces.length}
+              </span>
+                </div>
+                <button
+                  onClick={() => setShowMayCoverPlaces(!showMayCoverPlaces)}
+                  style={{
+                    padding: '4px 8px',
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#6b7280',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem',
+                    borderRadius: '6px',
+                    transition: 'all 0.15s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = '#f3f4f6';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'transparent';
+                  }}
+                >
+                  {showMayCoverPlaces ? '▼' : '▶'}
+            </button>
+              </div>
+              {showMayCoverPlaces && (
+              <div 
+                style={{
+                  padding: '12px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                  overflowY: 'auto'
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (draggedRoutePlace) {
+                    e.dataTransfer.dropEffect = 'move';
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (draggedRoutePlace) {
+                    handleDropRouteToMayCover(e, mayCoverPlaces.length);
+                  }
+                }}
+              >
+                  {mayCoverPlaces.map((place, index) => (
                     <div
-                      key={place.id}
+                      key={`may-cover-${place.place_id || place.id || index}`}
                       draggable
-                      onDragStart={() => handleDragStartAvailable(place, index)}
-                      onDragOver={(e) => e.preventDefault()}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
+                      onDragStart={(e) => handleDragStartMayCover(e, index)}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (draggedRoutePlace) {
+                          e.dataTransfer.dropEffect = 'move';
+                          e.currentTarget.style.borderColor = '#10b981';
+                          e.currentTarget.style.background = '#f0fdf4';
+                        } else {
+                          handleDragOverMayCover(e, index);
+                        }
+                      }}
+                      onDragLeave={(e) => {
+                        if (draggedRoutePlace) {
+                          e.currentTarget.style.borderColor = '#e5e7eb';
+                          e.currentTarget.style.background = '#ffffff';
+                        } else {
+                          handleDragLeaveMayCover(e);
+                        }
+                      }}
+                      onDragEnd={(e) => handleDragEndMayCover(e)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (draggedRoutePlace) {
+                          handleDropRouteToMayCover(e, index);
+                        } else {
+                          handleDropMayCover(e, index);
+                        }
+                      }}
+                        style={{
+                  display: 'flex',
+                  alignItems: 'center',
                         gap: '12px',
-                        padding: '10px',
-                        background: '#ffffff',
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '8px',
-                        cursor: 'grab',
-                        transition: 'all 0.2s ease'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = '#f9fafb';
-                        e.currentTarget.style.borderColor = '#d1d5db';
-                        e.currentTarget.style.cursor = 'grab';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = '#ffffff';
-                        e.currentTarget.style.borderColor = '#e5e7eb';
+                        padding: '10px 12px',
+                        background: draggedMayCoverIndex === index ? '#f3f4f6' : '#ffffff',
+                        border: '2px solid',
+                        borderColor: draggedMayCoverIndex === index ? '#d1d5db' : '#e5e7eb',
+                        borderRadius: '10px',
+                        cursor: 'move',
+                        transition: 'all 0.2s ease',
+                        opacity: draggedMayCoverIndex === index ? 0.5 : 1,
+                        boxShadow: draggedMayCoverIndex === index ? 'none' : '0 1px 2px rgba(0, 0, 0, 0.05)'
+                        }}
+                        onMouseEnter={(e) => {
+                        if (draggedMayCoverIndex !== index) {
+                          e.currentTarget.style.background = '#f9fafb';
+                          e.currentTarget.style.borderColor = '#d1d5db';
+                          e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                        if (draggedMayCoverIndex !== index) {
+                          e.currentTarget.style.background = '#ffffff';
+                            e.currentTarget.style.borderColor = '#e5e7eb';
+                          e.currentTarget.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
+                        }
                       }}
                     >
                       <div style={{
-                        width: '28px',
-                        height: '28px',
-                        background: '#e5e7eb',
-                        borderRadius: '6px',
+                        width: '32px',
+                        height: '32px',
+                        background: 'linear-gradient(135deg, #10b981, #059669)',
+                        borderRadius: '8px',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: '0.75rem',
-                        color: '#6b7280',
-                        flexShrink: 0
+                        fontSize: '1rem',
+                        color: 'white',
+                        flexShrink: 0,
+                        fontWeight: '700'
                       }}>
-                        +
+                        📍
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{
@@ -1158,24 +1644,265 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap'
                         }}>
-                          {[place.city, place.state].filter(Boolean).join(', ')}
+                          {[place.city, place.state].filter(Boolean).join(', ') || 'Location unknown'}
                         </div>
                       </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMayCoverPlaces(mayCoverPlaces.filter(mp => (mp.place_id || mp.id) !== (place.place_id || place.id)));
+                          setMayCoverChanged(true); // Mark may cover as changed
+                    }}
+                          style={{
+                          padding: '4px 8px',
+                          background: 'transparent',
+                  border: 'none',
+                          color: '#ef4444',
+                  cursor: 'pointer',
+                          fontSize: '1rem',
+                          lineHeight: '1',
+                          borderRadius: '6px',
+                          transition: 'all 0.15s ease',
+                          flexShrink: 0,
+                          width: '24px',
+                          height: '24px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                      }}
+                      onMouseEnter={(e) => {
+                          e.target.style.background = '#fee2e2';
+                          e.target.style.color = '#dc2626';
+                      }}
+                      onMouseLeave={(e) => {
+                          e.target.style.background = 'transparent';
+                          e.target.style.color = '#ef4444';
+                }}
+                        title="Remove from may cover"
+              >
+                        ×
+              </button>
+                </div>
+                  ))}
           </div>
+            )}
+        </div>
+      )}
+
+          {/* Available Places Section - REMOVED: Only show May Cover Places in second list */}
+          {false && (availablePlaces.length > 0 || routePlaces.length < (filteredPlaces.length || 0)) && (
+          <div style={{
+              borderTop: '2px solid #e5e7eb',
+              background: '#f9fafb',
+          flexShrink: 0
+        }}>
+            <button
+                onClick={() => setShowAvailablePlaces(!showAvailablePlaces)}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                  background: 'transparent',
+                border: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: '700',
+                  color: '#374151'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#f3f4f6';
+              }}
+              onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>📋</span>
+                  <span>Available Places ({availablePlaces.length})</span>
+              </span>
+                <span>{showAvailablePlaces ? '▼' : '▲'}</span>
+            </button>
+            
+              {showAvailablePlaces && (
+              <div style={{
+                  maxHeight: '300px',
+                  overflowY: 'auto',
+                padding: '12px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}>
+                  {availablePlaces.length === 0 ? (
+                    <div style={{
+                      textAlign: 'center',
+                      padding: '20px',
+                      color: '#9ca3af',
+                      fontSize: '0.8125rem'
+                    }}>
+                      All places are in your route
+                    </div>
+                  ) : (
+                    availablePlaces.map((place, index) => (
+                      <div
+                        key={place.id}
+                        draggable
+                        onDragStart={() => handleDragStartAvailable(place, index)}
+                        onDragOver={(e) => e.preventDefault()}
+                      style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          padding: '10px 12px',
+                        background: '#ffffff',
+                          border: '2px solid #e5e7eb',
+                        borderRadius: '10px',
+                          cursor: 'grab',
+                          transition: 'all 0.2s ease',
+                          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+                      }}
+                      onMouseEnter={(e) => {
+                          e.currentTarget.style.background = '#f9fafb';
+                          e.currentTarget.style.borderColor = '#6366f1';
+                          e.currentTarget.style.cursor = 'grab';
+                          e.currentTarget.style.boxShadow = '0 2px 4px rgba(99, 102, 241, 0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                          e.currentTarget.style.background = '#ffffff';
+                        e.currentTarget.style.borderColor = '#e5e7eb';
+                          e.currentTarget.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
+                      }}
+                    >
+                <div style={{ 
+                          width: '32px',
+                          height: '32px',
+                          background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                          borderRadius: '8px',
+                  display: 'flex', 
+                  alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '1rem',
+                          color: 'white',
+                          flexShrink: 0,
+                          fontWeight: '700'
+                        }}>
+                          +
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{
+                            fontSize: '0.875rem',
+                            fontWeight: '600',
+                            color: '#111827',
+                            marginBottom: '2px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {place.name}
+                          </div>
+                          <div style={{
+                            fontSize: '0.75rem',
+                            color: '#6b7280',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {[place.city, place.state].filter(Boolean).join(', ') || 'Location unknown'}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
         
-        {/* Right Panel - Dedicated Map for Route Planner */}
-        <div style={{
+        {/* Button to show markers on map - Between left and right panels */}
+        {showRoutePlanner && routePlaces.length > 0 && (
+          <div style={{
+            position: 'absolute',
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+                  <button
+              onClick={() => {
+                console.log('🔘 Show markers button clicked');
+                setShowMarkersOnMap(true);
+                setRouteHasChanges(false); // Reset changes flag when markers are updated
+                // Also trigger map bounds update
+                if (routeMap && routePlaces.length > 0) {
+                  setTimeout(() => {
+                    try {
+                      const bounds = new window.google.maps.LatLngBounds();
+                      const validPlaces = routePlaces.filter(rp => {
+                        const lat = rp.lat != null ? (typeof rp.lat === 'number' ? rp.lat : parseFloat(rp.lat)) : null;
+                        const lon = rp.lon != null ? (typeof rp.lon === 'number' ? rp.lon : parseFloat(rp.lon)) : null;
+                        return lat != null && lon != null && !isNaN(lat) && !isNaN(lon) && isFinite(lat) && isFinite(lon);
+                      });
+                      validPlaces.forEach(rp => {
+                        const lat = typeof rp.lat === 'number' ? rp.lat : parseFloat(rp.lat);
+                        const lon = typeof rp.lon === 'number' ? rp.lon : parseFloat(rp.lon);
+                        bounds.extend({ lat, lng: lon });
+                      });
+                      if (!bounds.isEmpty()) {
+                        routeMap.fitBounds(bounds, { padding: 80 });
+                      }
+                    } catch (error) {
+                      console.error('Error fitting bounds:', error);
+                    }
+                  }, 100);
+                }
+                          }}
+                    style={{
+                padding: '12px 24px',
+                background: routeHasChanges ? '#6366f1' : (showMarkersOnMap ? '#10b981' : '#6366f1'),
+                color: '#ffffff',
+                      border: 'none',
+                borderRadius: '12px',
+                fontSize: '0.9375rem',
+                fontWeight: '700',
+                            cursor: 'pointer',
+                boxShadow: routeHasChanges ? '0 4px 12px rgba(99, 102, 241, 0.6)' : '0 4px 12px rgba(99, 102, 241, 0.4)',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                zIndex: 1001,
+                animation: routeHasChanges ? 'pulse 2s ease-in-out infinite' : 'none'
+                          }}
+                          onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(99, 102, 241, 0.5)';
+                          }}
+                          onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(99, 102, 241, 0.4)';
+                    }}
+              title={routeHasChanges ? 'Route updated - Click to refresh markers' : (showMarkersOnMap ? 'Markers are visible on map' : 'Click to show markers on map')}
+                  >
+              <span style={{ fontSize: '1.25rem' }}>{routeHasChanges ? '🔄' : (showMarkersOnMap ? '✓' : '📍')}</span>
+              <span>{routeHasChanges ? 'Update Map' : (showMarkersOnMap ? 'Markers Shown' : 'Show on Map')}</span>
+                  </button>
+                </div>
+        )}
+                
+          {/* Right Panel - Dedicated Map for Route Planner - Always visible when showRoutePlanner is true */}
+                      <div style={{
           width: '50%',
           background: '#f0f0f0',
           position: 'relative',
           borderLeft: '1px solid rgba(229, 231, 235, 0.5)',
-          overflow: 'hidden'
+          overflow: 'hidden',
+                        display: 'flex',
+          flexDirection: 'column'
         }}>
           {API_KEY && API_KEY.trim() !== '' ? (
             window.google && window.google.maps ? (
@@ -1217,42 +1944,60 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                   fullscreenControl: true
                 }}
               >
-                {/* Route Place Markers */}
-                {window.google && window.google.maps && routePlaces
-                  .filter((rp) => rp.lat != null && rp.lon != null && !isNaN(parseFloat(rp.lat)) && !isNaN(parseFloat(rp.lon)))
+                {/* Route Place Markers - Show when button is clicked */}
+                {showRoutePlanner && showMarkersOnMap && window.google && window.google.maps && validRoutePlacesForMarkers
+                  .sort((a, b) => {
+                    const orderA = a.order_index != null ? a.order_index : 0;
+                    const orderB = b.order_index != null ? b.order_index : 0;
+                    return orderA - orderB;
+                  })
                   .map((rp, idx) => {
-                    const lat = parseFloat(rp.lat);
-                    const lon = parseFloat(rp.lon);
+                    const lat = typeof rp.lat === 'number' ? rp.lat : parseFloat(rp.lat);
+                    const lon = typeof rp.lon === 'number' ? rp.lon : parseFloat(rp.lon);
+                    
+                    // Use order_index for the number, fallback to idx + 1
+                    const markerNumber = (rp.order_index != null ? rp.order_index : idx) + 1;
+                    const markerKey = `route-marker-${rp.place_id || rp.placeId || idx}-${markerNumber}-${lat}-${lon}`;
+                    console.log(`📍 Rendering marker ${markerNumber} at (${lat}, ${lon}) for ${rp.name || 'Unknown'}, key: ${markerKey}`);
                     
                     return (
                       <Marker
-                        key={`route-${rp.place_id || rp.placeId || idx}-${idx}`}
+                        key={markerKey}
                         position={{ lat, lng: lon }}
                         label={{
-                          text: String(idx + 1),
+                          text: String(markerNumber),
                           color: '#ffffff',
-                          fontSize: '12px',
+                          fontSize: '13px',
                           fontWeight: 'bold'
                         }}
                         icon={{
                           path: window.google.maps.SymbolPath.CIRCLE,
-                          scale: 14,
+                          scale: 16,
                           fillColor: '#6366f1',
                           fillOpacity: 1,
                           strokeColor: '#ffffff',
-                          strokeWeight: 2
+                          strokeWeight: 3
                         }}
-                        title={`${idx + 1}. ${rp.name || 'Place'}`}
+                        title={`${markerNumber}. ${rp.name || 'Place'}`}
+                        animation={window.google.maps.Animation.DROP}
                       />
                     );
                   })}
                 
                 {/* Polyline connecting route places */}
-                {routePlaces.length > 1 && (
+                {showRoutePlanner && showMarkersOnMap && routePlaces.length > 1 && (
                   <Polyline
                     path={routePlaces
-                      .filter((rp) => rp.lat != null && rp.lon != null && !isNaN(parseFloat(rp.lat)) && !isNaN(parseFloat(rp.lon)))
-                      .map((rp) => ({ lat: parseFloat(rp.lat), lng: parseFloat(rp.lon) }))}
+                      .filter((rp) => {
+                        const lat = rp.lat != null ? (typeof rp.lat === 'number' ? rp.lat : parseFloat(rp.lat)) : null;
+                        const lon = rp.lon != null ? (typeof rp.lon === 'number' ? rp.lon : parseFloat(rp.lon)) : null;
+                        return lat != null && lon != null && !isNaN(lat) && !isNaN(lon) && isFinite(lat) && isFinite(lon);
+                      })
+                      .map((rp) => {
+                        const lat = typeof rp.lat === 'number' ? rp.lat : parseFloat(rp.lat);
+                        const lon = typeof rp.lon === 'number' ? rp.lon : parseFloat(rp.lon);
+                        return { lat, lng: lon };
+                      })}
                     options={{
                       strokeColor: '#6366f1',
                       strokeOpacity: 0.8,
@@ -1267,9 +2012,9 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                 googleMapsApiKey={API_KEY}
                 libraries={['geometry']}
                 loadingElement={<div style={{ 
-                  display: 'flex', 
+                        display: 'flex',
                   justifyContent: 'center', 
-                  alignItems: 'center', 
+                        alignItems: 'center',
                   height: '100%',
                   fontSize: '1rem',
                   color: '#6b7280',
@@ -1321,42 +2066,60 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                     fullscreenControl: true
                   }}
                 >
-                {/* Route Place Markers */}
-                {window.google && window.google.maps && routePlaces
-                  .filter((rp) => rp.lat != null && rp.lon != null && !isNaN(parseFloat(rp.lat)) && !isNaN(parseFloat(rp.lon)))
+                {/* Route Place Markers - Show when button is clicked */}
+                {showRoutePlanner && showMarkersOnMap && window.google && window.google.maps && validRoutePlacesForMarkers
+                  .sort((a, b) => {
+                    const orderA = a.order_index != null ? a.order_index : 0;
+                    const orderB = b.order_index != null ? b.order_index : 0;
+                    return orderA - orderB;
+                  })
                   .map((rp, idx) => {
-                    const lat = parseFloat(rp.lat);
-                    const lon = parseFloat(rp.lon);
+                    const lat = typeof rp.lat === 'number' ? rp.lat : parseFloat(rp.lat);
+                    const lon = typeof rp.lon === 'number' ? rp.lon : parseFloat(rp.lon);
+                    
+                    // Use order_index for the number, fallback to idx + 1
+                    const markerNumber = (rp.order_index != null ? rp.order_index : idx) + 1;
+                    const markerKey = `route-marker-${rp.place_id || rp.placeId || idx}-${markerNumber}-${lat}-${lon}`;
+                    console.log(`📍 Rendering marker ${markerNumber} at (${lat}, ${lon}) for ${rp.name || 'Unknown'} (LoadScript), key: ${markerKey}`);
                     
                     return (
                       <Marker
-                        key={`route-${rp.place_id || rp.placeId || idx}-${idx}`}
+                        key={markerKey}
                         position={{ lat, lng: lon }}
                         label={{
-                          text: String(idx + 1),
+                          text: String(markerNumber),
                           color: '#ffffff',
-                          fontSize: '12px',
+                          fontSize: '13px',
                           fontWeight: 'bold'
                         }}
                         icon={{
                           path: window.google.maps.SymbolPath.CIRCLE,
-                          scale: 14,
+                          scale: 16,
                           fillColor: '#6366f1',
                           fillOpacity: 1,
                           strokeColor: '#ffffff',
-                          strokeWeight: 2
+                          strokeWeight: 3
                         }}
-                        title={`${idx + 1}. ${rp.name || 'Place'}`}
+                        title={`${markerNumber}. ${rp.name || 'Place'}`}
+                        animation={window.google.maps.Animation.DROP}
                       />
                     );
                   })}
                 
                 {/* Polyline connecting route places */}
-                {routePlaces.length > 1 && (
+                {showRoutePlanner && showMarkersOnMap && routePlaces.length > 1 && (
                   <Polyline
                     path={routePlaces
-                      .filter((rp) => rp.lat != null && rp.lon != null && !isNaN(parseFloat(rp.lat)) && !isNaN(parseFloat(rp.lon)))
-                      .map((rp) => ({ lat: parseFloat(rp.lat), lng: parseFloat(rp.lon) }))}
+                      .filter((rp) => {
+                        const lat = rp.lat != null ? (typeof rp.lat === 'number' ? rp.lat : parseFloat(rp.lat)) : null;
+                        const lon = rp.lon != null ? (typeof rp.lon === 'number' ? rp.lon : parseFloat(rp.lon)) : null;
+                        return lat != null && lon != null && !isNaN(lat) && !isNaN(lon) && isFinite(lat) && isFinite(lon);
+                      })
+                      .map((rp) => {
+                        const lat = typeof rp.lat === 'number' ? rp.lat : parseFloat(rp.lat);
+                        const lon = typeof rp.lon === 'number' ? rp.lon : parseFloat(rp.lon);
+                        return { lat, lng: lon };
+                      })}
                     options={{
                       strokeColor: '#6366f1',
                       strokeOpacity: 0.8,
@@ -1369,7 +2132,7 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
               </LoadScript>
             )
           ) : (
-            <div style={{
+                  <div style={{ 
               position: 'absolute',
               top: '50%',
               left: '50%',
@@ -1390,12 +2153,12 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                   : 'Google Maps API key not configured'
                 }
               </div>
-            </div>
-          )}
-        </div>
+                  </div>
+                )}
+              </div>
       </div>
       ) : (
-      <div style={{
+          <div style={{ 
         flex: 1,
         overflowY: 'auto',
         overflowX: 'hidden',
@@ -1408,8 +2171,8 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
       }}>
       {/* Modern Filter Dropdowns */}
       {!showRoutePlanner && places.length > 0 && (
-          <div style={{
-            display: 'flex',
+                  <div style={{
+                    display: 'flex',
             flexDirection: 'row',
             gap: '12px',
             flexShrink: 0,
@@ -1432,7 +2195,7 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                 }}
                 multiple={true}
               />
-            </div>
+                    </div>
 
             {/* Member Filter */}
             {allMembers.length > 0 && (
@@ -1457,7 +2220,7 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                   }}
                   multiple={true}
                 />
-              </div>
+                  </div>
             )}
 
             {/* Status Filter - Only show if members are selected */}
@@ -1487,8 +2250,8 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                 />
               </div>
             )}
-          </div>
-        )}
+        </div>
+      )}
 
         {/* Places List - Hidden when route planner is active */}
       {places.length === 0 ? (
@@ -1715,11 +2478,14 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                     </span>
                 </div>
 
-                  {/* Row 3: Add to Route Button */}
+                  {/* Row 3: Action Buttons */}
                   <div style={{
                     paddingTop: '12px',
                     borderTop: '1px solid #f3f4f6',
-                    marginBottom: '12px'
+                    marginBottom: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
                   }}>
                     <button
                       onClick={(e) => {
@@ -1732,7 +2498,7 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                         padding: '8px 12px',
                         background: routePlaces.some(rp => rp.place_id === place.id) 
                           ? '#e5e7eb' 
-                          : 'rgba(99, 102, 241, 0.9)',
+                          : '#6366f1',
                         color: routePlaces.some(rp => rp.place_id === place.id) 
                           ? '#9ca3af' 
                           : 'white',
@@ -1743,24 +2509,90 @@ function GroupPlaces({ groupId, onBack, onBackToGroupDetails, onShowOnMap, isSho
                         cursor: routePlaces.some(rp => rp.place_id === place.id) 
                           ? 'not-allowed' 
                           : 'pointer',
-                        transition: 'all 0.2s ease'
+                        transition: 'all 0.2s ease',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px'
                       }}
                       onMouseEnter={(e) => {
                         if (!routePlaces.some(rp => rp.place_id === place.id)) {
-                          e.target.style.background = 'rgba(79, 70, 229, 0.95)';
+                          e.target.style.background = '#4f46e5';
                           e.target.style.transform = 'translateY(-1px)';
                         }
                       }}
                       onMouseLeave={(e) => {
                         if (!routePlaces.some(rp => rp.place_id === place.id)) {
-                          e.target.style.background = 'rgba(99, 102, 241, 0.9)';
+                          e.target.style.background = '#6366f1';
                           e.target.style.transform = 'translateY(0)';
                         }
                       }}
                     >
-                      {routePlaces.some(rp => rp.place_id === place.id) 
-                        ? '✓ In Route' 
-                        : '+ Add to Route'}
+                      <span>➕</span>
+                      <span>{routePlaces.some(rp => rp.place_id === place.id) ? '✓ In Route' : 'Add to Route'}</span>
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Add to may cover places
+                        if (mayCoverPlaces.some(mp => (mp.place_id || mp.id) === place.id)) {
+                          // Remove if already in may cover
+                          setMayCoverPlaces(mayCoverPlaces.filter(mp => (mp.place_id || mp.id) !== place.id));
+                          setMayCoverChanged(true); // Mark may cover as changed
+                        } else {
+                          // Add to may cover
+                          const newMayCoverPlace = {
+                            place_id: place.id,
+                            id: place.id,
+                            name: place.name || 'Unknown',
+                            city: place.city || '',
+                            state: place.state || '',
+                            country: place.country || '',
+                            lat: place.lat ? parseFloat(place.lat) : null,
+                            lon: place.lon ? parseFloat(place.lon) : null,
+                            place_type: place.place_type || 'unknown'
+                          };
+                          setMayCoverPlaces([...mayCoverPlaces, newMayCoverPlace]);
+                          setMayCoverChanged(true); // Mark may cover as changed
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        background: mayCoverPlaces.some(mp => (mp.place_id || mp.id) === place.id)
+                          ? '#10b981'
+                          : '#f3f4f6',
+                        color: mayCoverPlaces.some(mp => (mp.place_id || mp.id) === place.id)
+                          ? 'white'
+                          : '#374151',
+                        border: mayCoverPlaces.some(mp => (mp.place_id || mp.id) === place.id)
+                          ? 'none'
+                          : '1px solid #e5e7eb',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '0.8125rem',
+                        fontWeight: '600',
+                        transition: 'all 0.2s ease',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!mayCoverPlaces.some(mp => (mp.place_id || mp.id) === place.id)) {
+                          e.target.style.background = '#e5e7eb';
+                          e.target.style.transform = 'translateY(-1px)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!mayCoverPlaces.some(mp => (mp.place_id || mp.id) === place.id)) {
+                          e.target.style.background = '#f3f4f6';
+                          e.target.style.transform = 'translateY(0)';
+                        }
+                      }}
+                    >
+                      <span>{mayCoverPlaces.some(mp => (mp.place_id || mp.id) === place.id) ? '✓' : '📍'}</span>
+                      <span>{mayCoverPlaces.some(mp => (mp.place_id || mp.id) === place.id) ? 'In May Cover' : 'May Cover Places'}</span>
                     </button>
                   </div>
 

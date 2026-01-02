@@ -8,6 +8,7 @@ import Login from './components/Login';
 import UserAuth from './components/UserAuth';
 import Groups from './components/Groups';
 import GroupPlaces from './components/GroupPlaces';
+import AccountSettings from './components/AccountSettings';
 import { getUserProfile, getVisitedList, getWishlist, getLikedList } from './services/userListsApi';
 import PlaceListIcons from './components/PlaceListIcons';
 import { searchPlaces, getStats, getStateAnalytics, getDensityAnalysis, exportData, checkPermissions, addPlace, uploadCSV, setAuthToken, getAuthToken } from './services/api';
@@ -92,6 +93,9 @@ function App() {
   const [showGroups, setShowGroups] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
   const [groupsViewState, setGroupsViewState] = useState(null);
+  
+  // Account Settings state
+  const [showAccountSettings, setShowAccountSettings] = useState(false);
   
   // User header card toggle
   const [showUserHeader, setShowUserHeader] = useState(false); // Hidden by default - using NavBar instead
@@ -1332,6 +1336,7 @@ function App() {
         onCSVUpload={handleCSVUpload}
         uploadingCSV={uploadingCSV}
         fileInputRef={fileInputRef}
+        onShowAccountSettings={() => setShowAccountSettings(true)}
       />
 
       {/* User Panel removed - all functionality moved to NavBar */}
@@ -1344,6 +1349,20 @@ function App() {
           onCancel={() => {
             setShowUserAuth(false);
             setUserAuthKey(prev => prev + 1); // Force remount on next open
+          }}
+        />
+      )}
+
+      {/* Account Settings Modal */}
+      {showAccountSettings && userAccount && (
+        <AccountSettings
+          onClose={() => setShowAccountSettings(false)}
+          onUpdate={(updatedUser) => {
+            // Update userAccount state with new profile data
+            setUserAccount(prev => ({
+              ...prev,
+              ...updatedUser
+            }));
           }}
         />
       )}

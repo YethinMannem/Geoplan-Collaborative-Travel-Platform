@@ -1,6 +1,50 @@
-import React, { useState, useEffect } from 'react';
-import { getUserGroups, createGroup, getGroupDetails, addGroupMember, removeGroupMember, getGroupPlaces } from '../services/userListsApi';
+import React, { useState, useEffect, useRef } from 'react';
+import { getUserGroups, createGroup, getGroupDetails, addGroupMember, removeGroupMember, getGroupPlaces, getGroupMessages } from '../services/userListsApi';
+import GroupChat from './GroupChat';
 import './Groups.css';
+
+// Helper function to render member avatar
+const renderMemberAvatar = (member) => {
+  const hasPhoto = member?.profile_photo_url && member.profile_photo_url && member.profile_photo_url.trim() !== '';
+  const displayName = member?.display_name || member?.username;
+  const initials = displayName?.[0]?.toUpperCase() || '👤';
+  
+  return (
+    <div 
+      style={{
+        width: '36px',
+        height: '36px',
+        borderRadius: '50%',
+        background: hasPhoto ? 'transparent' : 'linear-gradient(135deg, #6366f1, #8b5cf6)', // Only show gradient when NO photo
+        backgroundImage: hasPhoto ? `url(${member.profile_photo_url})` : 'none', // Only show image when photo exists
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        boxShadow: '0 2px 4px rgba(99, 102, 241, 0.2)',
+        flexShrink: 0,
+        overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative'
+      }}
+      title={displayName}
+    >
+      {/* Show initials only when NO photo - use black text for better visibility */}
+      {!hasPhoto && (
+        <span style={{
+          color: '#000000',
+          fontWeight: '700',
+          fontSize: '0.8125rem',
+          zIndex: 1,
+          textShadow: '0 1px 2px rgba(255, 255, 255, 0.8)'
+        }}>
+          {initials}
+        </span>
+      )}
+    </div>
+  );
+};
 
 function Groups({ onViewGroupPlaces, onClose, initialGroupIdToShow }) {
   const [groups, setGroups] = useState([]);
@@ -13,10 +57,81 @@ function Groups({ onViewGroupPlaces, onClose, initialGroupIdToShow }) {
   const [newGroupDescription, setNewGroupDescription] = useState('');
   const [newMemberUsername, setNewMemberUsername] = useState('');
   const [addingMember, setAddingMember] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState(null);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+  const lastViewedMessageIdRef = useRef(null);
+  const unreadCheckIntervalRef = useRef(null);
 
   useEffect(() => {
     loadGroups();
   }, []);
+
+  // Check for unread messages when a group is selected and chat is closed
+  const checkUnreadMessages = async (groupId) => {
+    if (!groupId || !currentUserId || showChat) return;
+    
+    try {
+      const response = await getGroupMessages(groupId);
+      if (response && response.success && response.messages) {
+        const messages = response.messages;
+        if (messages.length === 0) {
+          setUnreadMessageCount(0);
+          return;
+        }
+        
+        // If we haven't viewed messages yet, set the last viewed to the last message
+        if (lastViewedMessageIdRef.current === null) {
+          const lastMessageId = messages[messages.length - 1].message_id;
+          lastViewedMessageIdRef.current = lastMessageId;
+          setUnreadMessageCount(0);
+          return;
+        }
+        
+        // Count messages after the last viewed message ID
+        const lastViewedIndex = messages.findIndex(m => m.message_id === lastViewedMessageIdRef.current);
+        if (lastViewedIndex === -1) {
+          // Last viewed message not found, count all messages
+          setUnreadMessageCount(messages.length);
+        } else {
+          // Count messages after the last viewed one
+          const unreadCount = messages.length - lastViewedIndex - 1;
+          setUnreadMessageCount(Math.max(0, unreadCount));
+        }
+      }
+    } catch (err) {
+      console.error('Error checking unread messages:', err);
+    }
+  };
+
+  // Poll for unread messages when group is selected and chat is closed
+  useEffect(() => {
+    const groupId = selectedGroup?.group?.group_id;
+    if (groupId && !showChat && currentUserId) {
+      // Reset unread count and last viewed when group changes
+      lastViewedMessageIdRef.current = null;
+      
+      // Initial check
+      checkUnreadMessages(groupId);
+      
+      // Poll every 5 seconds
+      unreadCheckIntervalRef.current = setInterval(() => {
+        checkUnreadMessages(groupId);
+      }, 5000);
+      
+      return () => {
+        if (unreadCheckIntervalRef.current) {
+          clearInterval(unreadCheckIntervalRef.current);
+        }
+      };
+    } else {
+      setUnreadMessageCount(0);
+      if (unreadCheckIntervalRef.current) {
+        clearInterval(unreadCheckIntervalRef.current);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedGroup?.group?.group_id, showChat, currentUserId]);
 
   // Show group details if initialGroupIdToShow is provided
   useEffect(() => {
@@ -87,6 +202,10 @@ function Groups({ onViewGroupPlaces, onClose, initialGroupIdToShow }) {
     try {
       const response = await getGroupDetails(groupId);
       setSelectedGroup(response);
+      // Extract current user ID from the response
+      if (response && response.current_user_id) {
+        setCurrentUserId(response.current_user_id);
+      }
     } catch (err) {
       const errorMsg = err.message || 'Failed to load group details';
       // Provide more helpful error messages
@@ -583,6 +702,7 @@ function Groups({ onViewGroupPlaces, onClose, initialGroupIdToShow }) {
                 onClick={() => {
                   setSelectedGroup(null);
                   setError(null);
+                  setShowChat(false);
                 }}
                 style={{
                   color: '#000000',
@@ -610,7 +730,7 @@ function Groups({ onViewGroupPlaces, onClose, initialGroupIdToShow }) {
                 {selectedGroup.group.name}
               </span>
             </div>
-          
+            
             {/* Group Info Card - Glass Design */}
             <div style={{
               background: 'rgba(255, 255, 255, 0.85)',
@@ -895,7 +1015,6 @@ function Groups({ onViewGroupPlaces, onClose, initialGroupIdToShow }) {
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'space-between',
                       padding: '14px',
                       background: 'rgba(255, 255, 255, 0.7)',
                       backdropFilter: 'blur(8px)',
@@ -903,7 +1022,8 @@ function Groups({ onViewGroupPlaces, onClose, initialGroupIdToShow }) {
                       borderRadius: '12px',
                       border: '1px solid rgba(255, 255, 255, 0.5)',
                       boxShadow: '0 1px 4px rgba(0, 0, 0, 0.06)',
-                      transition: 'all 0.2s ease'
+                      transition: 'all 0.2s ease',
+                      position: 'relative'
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.3)';
@@ -919,22 +1039,7 @@ function Groups({ onViewGroupPlaces, onClose, initialGroupIdToShow }) {
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
-                      <div style={{
-                        width: '36px',
-                        height: '36px',
-                        borderRadius: '50%',
-                        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'white',
-                        fontWeight: '700',
-                        fontSize: '0.8125rem',
-                        boxShadow: '0 2px 4px rgba(99, 102, 241, 0.2)',
-                        flexShrink: 0
-                      }}>
-                        {member.username.charAt(0).toUpperCase()}
-                      </div>
+                      {renderMemberAvatar(member)}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{
                           fontSize: '0.875rem',
@@ -945,7 +1050,7 @@ function Groups({ onViewGroupPlaces, onClose, initialGroupIdToShow }) {
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap'
                         }}>
-                          {member.username}
+                          {member.display_name || member.username}
                         </div>
                         <div style={{
                           fontSize: '0.75rem',
@@ -963,31 +1068,35 @@ function Groups({ onViewGroupPlaces, onClose, initialGroupIdToShow }) {
                         onClick={() => handleRemoveMember(member.user_id, member.username)}
                       disabled={loading}
                         style={{
-                          width: '28px',
-                          height: '28px',
+                          position: 'absolute',
+                          bottom: '8px',
+                          right: '8px',
+                          width: '24px',
+                          height: '24px',
                           padding: '0',
-                          background: 'transparent',
-                          color: '#000000',
-                          border: '1.5px solid #d1d5db',
+                          background: '#fee2e2',
+                          color: '#ef4444',
+                          border: '1.5px solid #ef4444',
                           borderRadius: '6px',
                           cursor: loading ? 'not-allowed' : 'pointer',
                           transition: 'all 0.2s',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          flexShrink: 0
+                          flexShrink: 0,
+                          zIndex: 10
                         }}
                         onMouseEnter={(e) => {
                           if (!loading) {
-                            e.currentTarget.style.background = '#f3f4f6';
-                            e.currentTarget.style.borderColor = '#9ca3af';
+                            e.currentTarget.style.background = '#ef4444';
+                            e.currentTarget.style.color = '#ffffff';
                             e.currentTarget.style.transform = 'scale(1.1)';
                           }
                         }}
                         onMouseLeave={(e) => {
                           if (!loading) {
-                            e.currentTarget.style.background = 'transparent';
-                            e.currentTarget.style.borderColor = '#d1d5db';
+                            e.currentTarget.style.background = '#fee2e2';
+                            e.currentTarget.style.color = '#ef4444';
                             e.currentTarget.style.transform = 'scale(1)';
                           }
                         }}
@@ -1000,24 +1109,143 @@ function Groups({ onViewGroupPlaces, onClose, initialGroupIdToShow }) {
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
-                        strokeWidth="2.5"
+                        strokeWidth="3"
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       >
-                        <path d="M3 6h18"></path>
-                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-                        <line x1="10" y1="11" x2="10" y2="17"></line>
-                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
                       </svg>
                     </button>
                   )}
                 </div>
               ))}
             </div>
+            </div>
+
+            {/* Chat Panel - Fixed Right Side Panel */}
+            {showChat && currentUserId && selectedGroup && selectedGroup.group && (
+              <div style={{
+                position: 'fixed',
+                top: 0,
+                right: 0,
+                bottom: 0,
+                width: '30%',
+                minWidth: '320px',
+                maxWidth: '500px',
+                background: 'white',
+                boxShadow: '-4px 0 20px rgba(0, 0, 0, 0.15)',
+                zIndex: 1000,
+                display: 'flex',
+                flexDirection: 'column',
+                animation: 'slideInRight 0.3s ease-out',
+                overflow: 'hidden',
+                pointerEvents: 'auto'
+              }}>
+                <GroupChat
+                  groupId={selectedGroup.group.group_id}
+                  currentUserId={currentUserId}
+                  onClose={() => {
+                    setShowChat(false);
+                    // Mark messages as read when closing chat
+                    checkUnreadMessages(selectedGroup.group.group_id);
+                  }}
+                  onMessagesLoaded={(messages) => {
+                    // Mark all messages as viewed when chat opens
+                    if (messages && messages.length > 0) {
+                      const lastMessageId = messages[messages.length - 1].message_id;
+                      lastViewedMessageIdRef.current = lastMessageId;
+                      setUnreadMessageCount(0);
+                    }
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Floating Chat Button */}
+            {!showChat && currentUserId && selectedGroup && selectedGroup.group && (
+              <button
+                onClick={() => setShowChat(true)}
+                style={{
+                  position: 'fixed',
+                  bottom: '24px',
+                  right: '24px',
+                  width: '60px',
+                  height: '60px',
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  border: 'none',
+                  color: 'white',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 20px rgba(99, 102, 241, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '24px',
+                  zIndex: 1001,
+                  transition: 'all 0.3s ease',
+                  WebkitTapHighlightColor: 'transparent'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.1)';
+                  e.currentTarget.style.boxShadow = '0 6px 25px rgba(99, 102, 241, 0.5)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = '0 4px 20px rgba(99, 102, 241, 0.4)';
+                }}
+                aria-label="Open group chat"
+                title="Open group chat"
+              >
+                {/* Speech Bubble with Ellipsis Icon */}
+                <svg
+                  width="26"
+                  height="26"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  style={{ position: 'relative' }}
+                >
+                  {/* Speech Bubble Shape */}
+                  <path
+                    d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4l4 4 4-4h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"
+                    fill="white"
+                  />
+                  {/* Ellipsis dots (three horizontal dots) */}
+                  <circle cx="8" cy="12" r="1.5" fill="#6366f1" />
+                  <circle cx="12" cy="12" r="1.5" fill="#6366f1" />
+                  <circle cx="16" cy="12" r="1.5" fill="#6366f1" />
+                </svg>
+                
+                {/* Unread Message Badge */}
+                {unreadMessageCount > 0 && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '-4px',
+                      right: '-4px',
+                      minWidth: '20px',
+                      height: '20px',
+                      borderRadius: '10px',
+                      background: '#ef4444',
+                      color: 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '0.7rem',
+                      fontWeight: '700',
+                      padding: '0 6px',
+                      boxShadow: '0 2px 8px rgba(239, 68, 68, 0.5)',
+                      border: '2px solid white',
+                      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                    }}
+                  >
+                    {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                  </div>
+                )}
+              </button>
+            )}
           </div>
-        </div>
-      ) : (
+        ) : (
           /* Groups List View */
           <div>
           {loading && groups.length === 0 ? (
@@ -1238,34 +1466,63 @@ function Groups({ onViewGroupPlaces, onClose, initialGroupIdToShow }) {
                           gap: '-4px',
                           marginLeft: '4px'
                         }}>
-                          {Array.from({ length: Math.min(group.member_count, 4) }).map((_, index) => (
-                            <div
-                              key={index}
-                              style={{
-                                width: '24px',
-                                height: '24px',
-                                borderRadius: '50%',
-                                background: `linear-gradient(135deg, ${
-                                  ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b'][index % 4]
-                                }, ${
-                                  ['#4f46e5', '#7c3aed', '#db2777', '#d97706'][index % 4]
-                                })`,
-                                border: '2px solid rgba(255, 255, 255, 0.9)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '10px',
-                                fontWeight: '600',
-                                color: 'white',
-                                marginLeft: index > 0 ? '-6px' : '0',
-                                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.15)',
-                                zIndex: 4 - index
-                              }}
-                              title={`Member ${index + 1}`}
-                            >
-                              {String.fromCharCode(65 + (index % 26))}
-                            </div>
-                          ))}
+                          {(group.member_preview || []).slice(0, 4).map((member, index) => {
+                            const hasPhoto = member?.profile_photo_url && member.profile_photo_url && member.profile_photo_url.trim() !== '';
+                            const displayName = member?.display_name || member?.username;
+                            const initials = displayName?.[0]?.toUpperCase() || '👤';
+                            
+                            // Gradient colors for initials background (only when no photo)
+                            const gradientColors = [
+                              { start: '#6366f1', end: '#4f46e5' },
+                              { start: '#8b5cf6', end: '#7c3aed' },
+                              { start: '#ec4899', end: '#db2777' },
+                              { start: '#f59e0b', end: '#d97706' }
+                            ];
+                            const colors = gradientColors[index % 4];
+                            const gradientBg = `linear-gradient(135deg, ${colors.start}, ${colors.end})`;
+                            
+                            return (
+                              <div
+                                key={member.user_id || index}
+                                style={{
+                                  width: '24px',
+                                  height: '24px',
+                                  borderRadius: '50%',
+                                  background: hasPhoto ? 'transparent' : gradientBg, // Only show gradient when NO photo
+                                  backgroundImage: hasPhoto ? `url(${member.profile_photo_url})` : 'none', // Only show image when photo exists
+                                  backgroundSize: hasPhoto ? 'cover' : 'auto',
+                                  backgroundPosition: hasPhoto ? 'center' : 'auto',
+                                  backgroundRepeat: hasPhoto ? 'no-repeat' : 'no-repeat',
+                                  border: '2px solid rgba(255, 255, 255, 0.9)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '10px',
+                                  fontWeight: '700',
+                                  marginLeft: index > 0 ? '-6px' : '0',
+                                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.15)',
+                                  zIndex: 4 - index,
+                                  overflow: 'hidden',
+                                  position: 'relative'
+                                }}
+                                title={displayName}
+                              >
+                                {/* Show initials only when NO photo - use black text for better visibility */}
+                                {!hasPhoto && (
+                                  <span style={{
+                                    color: '#000000',
+                                    fontSize: '10px',
+                                    fontWeight: '700',
+                                    lineHeight: '1',
+                                    zIndex: 1,
+                                    textShadow: '0 1px 2px rgba(255, 255, 255, 0.8)'
+                                  }}>
+                                    {initials}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
                           {group.member_count > 4 && (
                             <div
                               style={{
